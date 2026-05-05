@@ -4,13 +4,19 @@ function ListenerDashboard({
   isListening,
   volume,
   setVolume,
-  delayMs,
-  setDelayMs,
   leaveRoom,
   startListening,
   stopListening,
   remoteAudioRef
 }) {
+  const toggleListening = () => {
+    if (isListening) {
+      stopListening();
+    } else {
+      startListening();
+    }
+  };
+
   return (
     <div className="page-shell">
       <div className="main-card dashboard-card">
@@ -36,12 +42,10 @@ function ListenerDashboard({
           <div className="panel-card">
             <h2>Listening Controls</h2>
             <div className="button-stack">
-              <button className="primary-button" onClick={startListening}>
-                Start Listening
+              <button className="primary-button" onClick={toggleListening}>
+                {isListening ? "Stop Listening" : "Start Listening"}
               </button>
-              <button className="secondary-button" onClick={stopListening}>
-                Stop Listening
-              </button>
+
               <button className="ghost-button" onClick={leaveRoom}>
                 Leave Room
               </button>
@@ -49,10 +53,10 @@ function ListenerDashboard({
           </div>
 
           <div className="panel-card">
-            <h2>Audio Settings</h2>
+            <h2>Volume</h2>
 
             <div className="slider-group">
-              <label>Volume: {Math.round(volume * 100)}%</label>
+              <label>{Math.round(volume * 100)}%</label>
               <input
                 type="range"
                 min="0"
@@ -62,24 +66,10 @@ function ListenerDashboard({
                 onChange={(e) => setVolume(Number(e.target.value))}
               />
             </div>
-
-            <div className="slider-group">
-              <label>Delay: {delayMs} ms</label>
-              <input
-                type="range"
-                min="0"
-                max="3000"
-                step="100"
-                value={delayMs}
-                onChange={(e) => setDelayMs(Number(e.target.value))}
-              />
-            </div>
           </div>
         </div>
 
-        <div className="audio-card">
-          <audio ref={remoteAudioRef} autoPlay controls className="audio-player" />
-        </div>
+        <audio ref={remoteAudioRef} autoPlay />
 
         <div className="status-banner">
           <strong>Status:</strong> {message}

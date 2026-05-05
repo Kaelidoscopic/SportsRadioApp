@@ -15,14 +15,12 @@ function App() {
   const [isMicOn, setIsMicOn] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [volume, setVolume] = useState(1);
-  const [delayMs, setDelayMs] = useState(0);
 
   const localStreamRef = useRef(null);
   const remoteAudioRef = useRef(null);
   const roleRef = useRef("");
   const listenerPeerRef = useRef(null);
   const hostPeerConnectionsRef = useRef({});
-  const delayedPlayTimeoutRef = useRef(null);
 
   const rtcConfig = {
     iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
@@ -52,26 +50,17 @@ function App() {
     }
   }, []);
 
-  const playRemoteAudioWithDelay = async () => {
+  const playRemoteAudio = async () => {
     if (!remoteAudioRef.current) return;
 
-    if (delayedPlayTimeoutRef.current) {
-      clearTimeout(delayedPlayTimeoutRef.current);
-      delayedPlayTimeoutRef.current = null;
+    try {
+      await remoteAudioRef.current.play();
+      setIsListening(true);
+      setMessage("Listening to live audio.");
+    } catch (err) {
+      console.log("Autoplay blocked.", err);
+      setMessage("Tap Start Listening to begin audio.");
     }
-
-    remoteAudioRef.current.pause();
-
-    delayedPlayTimeoutRef.current = setTimeout(async () => {
-      try {
-        await remoteAudioRef.current.play();
-        setIsListening(true);
-        setMessage(`Listening live with ${delayMs} ms delay.`);
-      } catch (err) {
-        console.log("Autoplay blocked.", err);
-        setMessage("Playback blocked. Tap Start Listening again.");
-      }
-    }, delayMs);
   };
 
   const createHostPeerConnection = (listenerSocketId) => {
@@ -115,7 +104,7 @@ function App() {
       if (remoteAudioRef.current) {
         remoteAudioRef.current.srcObject = event.streams[0];
         remoteAudioRef.current.volume = volume;
-        await playRemoteAudioWithDelay();
+        await playRemoteAudio();
       }
 
       setMessage("Receiving live audio.");
@@ -138,11 +127,6 @@ function App() {
     if (remoteAudioRef.current) {
       remoteAudioRef.current.pause();
       remoteAudioRef.current.srcObject = null;
-    }
-
-    if (delayedPlayTimeoutRef.current) {
-      clearTimeout(delayedPlayTimeoutRef.current);
-      delayedPlayTimeoutRef.current = null;
     }
 
     setIsListening(false);
@@ -320,7 +304,7 @@ function App() {
       socket.off("webrtc-answer");
       socket.off("webrtc-ice-candidate");
     };
-  }, [volume, delayMs]);
+  }, [volume]);
 
   const createRoom = () => {
     socket.emit("create-room");
@@ -384,7 +368,7 @@ function App() {
     if (roleRef.current !== "listener") return;
 
     if (remoteAudioRef.current && remoteAudioRef.current.srcObject) {
-      await playRemoteAudioWithDelay();
+      await playRemoteAudio();
     } else {
       socket.emit("request-stream");
       setMessage("Requesting live audio...");
@@ -396,11 +380,6 @@ function App() {
 
     if (remoteAudioRef.current) {
       remoteAudioRef.current.pause();
-    }
-
-    if (delayedPlayTimeoutRef.current) {
-      clearTimeout(delayedPlayTimeoutRef.current);
-      delayedPlayTimeoutRef.current = null;
     }
 
     setIsListening(false);
@@ -477,8 +456,6 @@ function App() {
       isListening={isListening}
       volume={volume}
       setVolume={setVolume}
-      delayMs={delayMs}
-      setDelayMs={setDelayMs}
       leaveRoom={leaveRoom}
       startListening={startListening}
       stopListening={stopListening}
