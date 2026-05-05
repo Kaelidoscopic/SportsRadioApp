@@ -331,6 +331,35 @@ input {
   font-size: 1.5rem;
 }
 
+.compact-landing {
+  max-width: 460px;
+  padding: 1.75rem;
+}
+
+.centered-brand {
+  text-align: center;
+}
+
+.compact-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.compact-input {
+  margin-bottom: 0;
+  text-align: center;
+  text-transform: lowercase;
+  letter-spacing: 0.08rem;
+}
+
+.join-divider {
+  text-align: center;
+  color: #7f8a9a;
+  font-size: 0.9rem;
+  margin: 0.15rem 0;
+}
+
 @media (max-width: 700px) {
   .page-shell {
     padding: 1rem;
