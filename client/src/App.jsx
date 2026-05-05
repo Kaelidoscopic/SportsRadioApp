@@ -21,6 +21,7 @@ function App() {
   const listenerPeerRef = useRef(null);
   const hostPeerConnectionsRef = useRef({});
   const [isHostLive, setIsHostLive] = useState(false);
+  const [userPausedListening, setUserPausedListening] = useState(false);
 
   const rtcConfig = {
     iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
@@ -45,10 +46,15 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (role === "listener" && isHostLive && !isListening) {
+    if (
+      role === "listener" &&
+      isHostLive &&
+      !isListening &&
+      !userPausedListening
+    ) {
       startListening();
     }
-  }, [isHostLive, role, isListening]);
+  }, [isHostLive, role, isListening, userPausedListening]);
 
   const playRemoteAudio = async () => {
     if (!remoteAudioRef.current) return;
@@ -187,6 +193,7 @@ function App() {
       setMembers(data.members);
       setMessage(`Connected to room ${data.roomId}. Tap Start Listening to hear audio.`);
       setIsHostLive(Boolean(data.isBroadcasting));
+      setUserPausedListening(false);
     });
 
     socket.on("broadcast-status", (data) => {
@@ -194,6 +201,7 @@ function App() {
 
       if (!data.isBroadcasting) {
         setIsListening(false);
+        setUserPausedListening(false);
       }
     });
 
@@ -332,6 +340,7 @@ function App() {
     cleanupAllConnections();
     stopMicrophoneTracksOnly();
     socket.emit("leave-room");
+    setUserPausedListening(false);
   };
 
   const startMicrophone = async () => {
@@ -382,6 +391,8 @@ function App() {
   const startListening = async () => {
     if (roleRef.current !== "listener") return;
 
+    setUserPausedListening(false);
+
     if (remoteAudioRef.current && remoteAudioRef.current.srcObject) {
       await playRemoteAudio();
     } else {
@@ -393,12 +404,14 @@ function App() {
   const stopListening = () => {
     if (roleRef.current !== "listener") return;
 
+    setUserPausedListening(true);
+
     if (remoteAudioRef.current) {
       remoteAudioRef.current.pause();
     }
 
     setIsListening(false);
-    setMessage("Listening stopped.");
+    setMessage("Listening paused.");
   };
 
   const copyRoomCode = async () => {
@@ -433,8 +446,6 @@ function App() {
     }
   };
 
-  const listenerCount = Math.max(members.length - 1, 0);
-
   if (!role) {
     return (
       <LandingPage
@@ -452,7 +463,6 @@ function App() {
       <HostDashboard
         currentRoom={currentRoom}
         isMicOn={isMicOn}
-        listenerCount={listenerCount}
         leaveRoom={leaveRoom}
         startMicrophone={startMicrophone}
         stopMicrophone={stopMicrophone}
