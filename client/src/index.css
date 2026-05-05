@@ -360,6 +360,33 @@ input {
   margin: 0.15rem 0;
 }
 
+.scanner-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 1000;
+}
+
+.scanner-card {
+  width: 100%;
+  max-width: 380px;
+  background: #171a21;
+  border: 1px solid #2a2f3a;
+  border-radius: 18px;
+  padding: 1rem;
+}
+
+#qr-reader {
+  width: 100%;
+  overflow: hidden;
+  border-radius: 14px;
+  margin-bottom: 1rem;
+}
+
 @media (max-width: 700px) {
   .page-shell {
     padding: 1rem;

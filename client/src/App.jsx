@@ -327,13 +327,15 @@ function App() {
     socket.emit("create-room");
   };
 
-  const joinRoom = () => {
-    if (!roomId.trim()) {
+  const joinRoom = (overrideRoomId) => {
+    const codeToJoin = overrideRoomId || roomId;
+
+    if (!codeToJoin.trim()) {
       setMessage("Enter a room code first.");
       return;
     }
 
-    socket.emit("join-room", roomId.trim());
+    socket.emit("join-room", codeToJoin.trim());
   };
 
   const leaveRoom = () => {
