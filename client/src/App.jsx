@@ -460,7 +460,6 @@ function App() {
         setRoomId={setRoomId}
         createRoom={createRoom}
         joinRoom={joinRoom}
-        message={message}
       />
     );
   }

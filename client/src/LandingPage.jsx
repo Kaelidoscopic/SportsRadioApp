@@ -1,4 +1,4 @@
-function LandingPage({ roomId, setRoomId, createRoom, joinRoom, message }) {
+function LandingPage({ roomId, setRoomId, createRoom, joinRoom }) {
   return (
     <div className="page-shell">
       <div className="main-card landing-card">
@@ -38,10 +38,6 @@ function LandingPage({ roomId, setRoomId, createRoom, joinRoom, message }) {
               Join Audio
             </button>
           </div>
-        </div>
-
-        <div className="status-banner">
-          <strong>Status:</strong> {message}
         </div>
       </div>
     </div>
