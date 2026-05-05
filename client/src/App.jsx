@@ -382,14 +382,21 @@ function App() {
 
     stopMicrophoneTracksOnly();
     cleanupHostConnections();
-    setMessage("Broadcast stopped.");
 
     setIsHostLive(false);
     socket.emit("broadcast-stopped");
+
+    setMessage("Broadcast stopped.");
   };
 
   const startListening = async () => {
     if (roleRef.current !== "listener") return;
+
+    if (!isHostLive) {
+      setIsListening(false);
+      setMessage("Host is offline.");
+      return;
+    }
 
     setUserPausedListening(false);
 

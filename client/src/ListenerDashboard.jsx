@@ -37,7 +37,11 @@ function ListenerDashboard({
             {isListening ? "LIVE" : "PAUSED"}
           </div>
 
-          <button className="primary-button" onClick={toggleListening}>
+          <button
+            className="primary-button"
+            onClick={toggleListening}
+            disabled={!isHostLive && !isListening}
+          >
             {isListening ? "Stop Listening" : "Start Listening"}
           </button>
 
