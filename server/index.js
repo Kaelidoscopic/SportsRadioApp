@@ -28,7 +28,8 @@ io.on("connection", (socket) => {
 
     rooms[roomId] = {
       hostSocketId: socket.id,
-      listeners: []
+      listeners: [],
+      isBroadcasting: false
     };
 
     socket.join(roomId);
@@ -66,7 +67,8 @@ io.on("connection", (socket) => {
     socket.emit("joined-room", {
       roomId,
       role: "listener",
-      members
+      members,
+      isBroadcasting: room.isBroadcasting
     });
 
     io.to(room.hostSocketId).emit("listener-joined", {
@@ -170,6 +172,40 @@ io.on("connection", (socket) => {
 
         console.log(`${socket.id} removed from room ${roomId}`);
         break;
+      }
+    }
+  });
+
+  socket.on("broadcast-started", () => {
+    for (const roomId in rooms) {
+      const room = rooms[roomId];
+
+      if (room.hostSocketId === socket.id) {
+        room.isBroadcasting = true;
+
+        io.to(roomId).emit("broadcast-status", {
+          isBroadcasting: true
+        });
+
+        console.log(`Broadcast started in room ${roomId}`);
+        return;
+      }
+    }
+  });
+
+  socket.on("broadcast-stopped", () => {
+    for (const roomId in rooms) {
+      const room = rooms[roomId];
+
+      if (room.hostSocketId === socket.id) {
+        room.isBroadcasting = false;
+
+        io.to(roomId).emit("broadcast-status", {
+          isBroadcasting: false
+        });
+
+        console.log(`Broadcast stopped in room ${roomId}`);
+        return;
       }
     }
   });

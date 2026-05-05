@@ -20,6 +20,7 @@ function App() {
   const roleRef = useRef("");
   const listenerPeerRef = useRef(null);
   const hostPeerConnectionsRef = useRef({});
+  const [isHostLive, setIsHostLive] = useState(false);
 
   const rtcConfig = {
     iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
@@ -42,6 +43,12 @@ function App() {
       socket.emit("join-room", cleanRoomCode);
     }
   }, []);
+
+  useEffect(() => {
+    if (role === "listener" && isHostLive && !isListening) {
+      startListening();
+    }
+  }, [isHostLive, role]);
 
   const playRemoteAudio = async () => {
     if (!remoteAudioRef.current) return;
@@ -122,6 +129,7 @@ function App() {
     }
 
     setIsListening(false);
+    socket.off("broadcast-status");
   };
 
   const cleanupAllConnections = () => {
@@ -179,6 +187,15 @@ function App() {
       setRole(data.role);
       setMembers(data.members);
       setMessage(`Connected to room ${data.roomId}. Tap Start Listening to hear audio.`);
+      setIsHostLive(Boolean(data.isBroadcasting));
+    });
+
+    socket.on("broadcast-status", (data) => {
+      setIsHostLive(data.isBroadcasting);
+
+      if (!data.isBroadcasting) {
+        setIsListening(false);
+      }
     });
 
     socket.on("room-updated", (data) => {
@@ -332,6 +349,9 @@ function App() {
       localStreamRef.current = stream;
       setIsMicOn(true);
 
+      setIsHostLive(true);
+      socket.emit("broadcast-started");
+
       const listenerIds = members.filter((memberId) => memberId !== socket.id);
 
       if (listenerIds.length > 0) {
@@ -354,6 +374,9 @@ function App() {
     stopMicrophoneTracksOnly();
     cleanupHostConnections();
     setMessage("Broadcast stopped.");
+
+    setIsHostLive(false);
+    socket.emit("broadcast-stopped");
   };
 
   const startListening = async () => {
@@ -445,7 +468,7 @@ function App() {
       startListening={startListening}
       stopListening={stopListening}
       remoteAudioRef={remoteAudioRef}
-      isHostLive={isMicOn} // 👈 ADD THIS
+      isHostLive={isHostLive} // 👈 ADD THIS
     />
   );
 }
