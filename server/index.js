@@ -4,7 +4,6 @@ const cors = require("cors");
 const { Server } = require("socket.io");
 
 require("dotenv").config();
-const OpenAI = require("openai");
 
 const app = express();
 app.use(cors());
@@ -20,10 +19,6 @@ const io = new Server(server, {
 });
 
 const rooms = {};
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
 
 io.on("connection", (socket) => {
   console.log(`User connected: ${socket.id}`);
@@ -215,22 +210,6 @@ Rules:
 - Do not include explanation text.
 - League hint: ${leagueHint || "none"}
 `;
-
-    const response = await openai.responses.create({
-      model: "gpt-4.1-mini",
-      input: [
-        {
-          role: "user",
-          content: [
-            { type: "input_text", text: prompt },
-            {
-              type: "input_image",
-              image_url: imageBase64
-            }
-          ]
-        }
-      ]
-    });
 
     const outputText = response.output_text;
 
