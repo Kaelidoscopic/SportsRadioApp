@@ -1,0 +1,279 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #0f1115;
+  color: #f3f4f6;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.page-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.main-card {
+  width: 100%;
+  max-width: 980px;
+  background: #171a21;
+  border: 1px solid #2a2f3a;
+  border-radius: 20px;
+  padding: 2rem;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+
+.landing-card {
+  max-width: 1000px;
+}
+
+.dashboard-card {
+  max-width: 1000px;
+}
+
+.brand-block,
+.dashboard-header {
+  margin-bottom: 1.5rem;
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.app-title {
+  margin: 0 0 0.35rem;
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.app-subtitle {
+  margin: 0;
+  color: #b8c0cc;
+  line-height: 1.5;
+}
+
+.landing-grid,
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.panel-card,
+.room-code-card,
+.stat-card,
+.audio-card {
+  background: #1d212b;
+  border: 1px solid #2d3442;
+  border-radius: 16px;
+  padding: 1.25rem;
+}
+
+.panel-card h2 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  font-size: 1.15rem;
+}
+
+.panel-copy {
+  color: #b8c0cc;
+  line-height: 1.5;
+  margin-bottom: 1rem;
+}
+
+.room-input {
+  width: 100%;
+  margin-bottom: 1rem;
+  background: #10131a;
+  color: #f3f4f6;
+  border: 1px solid #31394a;
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+}
+
+.primary-button,
+.secondary-button,
+.ghost-button {
+  width: 100%;
+  border: none;
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.primary-button {
+  background: #4f8cff;
+  color: white;
+}
+
+.primary-button:hover {
+  background: #3d7ef8;
+}
+
+.secondary-button {
+  background: #2a3242;
+  color: white;
+}
+
+.secondary-button:hover {
+  background: #353f54;
+}
+
+.ghost-button {
+  background: transparent;
+  color: #d7deea;
+  border: 1px solid #394355;
+}
+
+.ghost-button:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.button-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.room-code-card {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.room-code-label {
+  margin: 0 0 0.5rem;
+  color: #a9b2bf;
+  font-size: 0.95rem;
+}
+
+.room-code-value {
+  font-size: 2.5rem;
+  font-weight: 700;
+  letter-spacing: 0.2rem;
+}
+
+.qr-card {
+  background: #1d212b;
+  border: 1px solid #2d3442;
+  border-radius: 16px;
+  padding: 1.25rem;
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.qr-box {
+  display: inline-flex;
+  background: white;
+  padding: 1rem;
+  border-radius: 16px;
+  margin: 0.75rem 0;
+}
+
+.qr-link-text {
+  color: #aeb6c3;
+  font-size: 0.85rem;
+  word-break: break-all;
+  margin: 0;
+}
+
+.live-pill {
+  border-radius: 999px;
+  padding: 0.55rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.live-pill.live {
+  background: rgba(34, 197, 94, 0.18);
+  color: #7ff0a2;
+  border: 1px solid rgba(34, 197, 94, 0.45);
+}
+
+.live-pill.offline {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ff9b9b;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.stat-label {
+  color: #aeb6c3;
+  font-size: 0.9rem;
+}
+
+.stat-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+.slider-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.slider-group input {
+  width: 100%;
+}
+
+.audio-player {
+  width: 100%;
+}
+
+.status-banner {
+  margin-top: 1rem;
+  background: #10141c;
+  border: 1px solid #2d3442;
+  border-radius: 14px;
+  padding: 1rem;
+  color: #dce3ee;
+  line-height: 1.5;
+}
+
+@media (max-width: 700px) {
+  .page-shell {
+    padding: 1rem;
+  }
+
+  .main-card {
+    padding: 1.25rem;
+  }
+
+  .room-code-value {
+    font-size: 2rem;
+    letter-spacing: 0.12rem;
+  }
+
+  .dashboard-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
