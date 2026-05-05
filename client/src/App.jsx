@@ -14,7 +14,6 @@ function App() {
   const [message, setMessage] = useState("Welcome.");
   const [isMicOn, setIsMicOn] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const [volume, setVolume] = useState(1);
 
   const localStreamRef = useRef(null);
   const remoteAudioRef = useRef(null);
@@ -29,12 +28,6 @@ function App() {
   useEffect(() => {
     roleRef.current = role;
   }, [role]);
-
-  useEffect(() => {
-    if (remoteAudioRef.current) {
-      remoteAudioRef.current.volume = volume;
-    }
-  }, [volume]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -103,7 +96,6 @@ function App() {
     pc.ontrack = async (event) => {
       if (remoteAudioRef.current) {
         remoteAudioRef.current.srcObject = event.streams[0];
-        remoteAudioRef.current.volume = volume;
         await playRemoteAudio();
       }
 
@@ -304,7 +296,7 @@ function App() {
       socket.off("webrtc-answer");
       socket.off("webrtc-ice-candidate");
     };
-  }, [volume]);
+  }, []);
 
   const createRoom = () => {
     socket.emit("create-room");
@@ -452,10 +444,7 @@ function App() {
   return (
     <ListenerDashboard
       currentRoom={currentRoom}
-      message={message}
       isListening={isListening}
-      volume={volume}
-      setVolume={setVolume}
       leaveRoom={leaveRoom}
       startListening={startListening}
       stopListening={stopListening}
