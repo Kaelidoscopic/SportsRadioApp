@@ -445,6 +445,7 @@ function App() {
       startListening={startListening}
       stopListening={stopListening}
       remoteAudioRef={remoteAudioRef}
+      isHostLive={isMicOn} // 👈 ADD THIS
     />
   );
 }

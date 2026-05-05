@@ -4,7 +4,8 @@ function ListenerDashboard({
   leaveRoom,
   startListening,
   stopListening,
-  remoteAudioRef
+  remoteAudioRef,
+  isHostLive // <-- new prop
 }) {
   const toggleListening = () => {
     if (isListening) {
@@ -17,30 +18,37 @@ function ListenerDashboard({
   return (
     <div className="page-shell">
       <div className="main-card dashboard-card listener-card">
-        <div className="room-code-card listener-room-card">
-          <p className="room-code-label">Connected Room</p>
-          <div className="room-code-value">{currentRoom || "------"}</div>
 
-          <div className={`live-pill listener-pill ${isListening ? "live" : "offline"}`}>
-            {isListening ? "LIVE" : "PAUSED"}
+        {/* ROOM STATUS */}
+        <div className="room-code-card listener-room-card">
+          <div className="room-code-value">
+            {currentRoom || "------"}
+          </div>
+
+          <div className={`live-pill ${isHostLive ? "live" : "offline"}`}>
+            {isHostLive ? "ONLINE" : "OFFLINE"}
           </div>
         </div>
 
-        <div className="panel-card">
-          <h2>Audio Controls</h2>
+        {/* AUDIO CONTROL */}
+        <div className="panel-card listener-controls">
 
-          <div className="button-stack">
-            <button className="primary-button" onClick={toggleListening}>
-              {isListening ? "Stop Listening" : "Start Listening"}
-            </button>
-
-            <button className="ghost-button" onClick={leaveRoom}>
-              Leave Room
-            </button>
+          <div className={`live-pill ${isListening ? "live" : "offline"}`}>
+            {isListening ? "LIVE" : "PAUSED"}
           </div>
+
+          <button className="primary-button" onClick={toggleListening}>
+            {isListening ? "Stop Listening" : "Start Listening"}
+          </button>
+
+          <button className="ghost-button" onClick={leaveRoom}>
+            Leave Room
+          </button>
+
         </div>
 
         <audio ref={remoteAudioRef} autoPlay />
+
       </div>
     </div>
   );
