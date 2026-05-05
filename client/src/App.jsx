@@ -428,15 +428,11 @@ function App() {
     return (
       <HostDashboard
         currentRoom={currentRoom}
-        message={message}
         isMicOn={isMicOn}
         listenerCount={listenerCount}
-        createRoom={createRoom}
         leaveRoom={leaveRoom}
         startMicrophone={startMicrophone}
         stopMicrophone={stopMicrophone}
-        copyRoomCode={copyRoomCode}
-        copyJoinLink={copyJoinLink}
       />
     );
   }

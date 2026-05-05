@@ -2,41 +2,34 @@ import { QRCodeSVG } from "qrcode.react";
 
 function HostDashboard({
   currentRoom,
-  message,
   isMicOn,
   listenerCount,
-  createRoom,
   leaveRoom,
   startMicrophone,
-  stopMicrophone,
-  copyRoomCode,
-  copyJoinLink
+  stopMicrophone
 }) {
-  const DEV_HOST = import.meta.env.VITE_FRONTEND_URL;
+  const joinLink = currentRoom
+    ? `${import.meta.env.VITE_FRONTEND_URL}/?room=${currentRoom}`
+    : "";
 
-    const joinLink = currentRoom
-      ? `${import.meta.env.VITE_FRONTEND_URL}/?room=${currentRoom}`
-      : "";
+  const toggleBroadcast = () => {
+    if (isMicOn) {
+      stopMicrophone();
+    } else {
+      startMicrophone();
+    }
+  };
 
   return (
     <div className="page-shell">
-      <div className="main-card dashboard-card">
-        <div className="dashboard-header">
-          <div>
-            <h1 className="app-title">Broadcast Room</h1>
-            <p className="app-subtitle">
-              Share live audio with nearby listeners.
-            </p>
-          </div>
-
-          <div className={`live-pill ${isMicOn ? "live" : "offline"}`}>
-            {isMicOn ? "LIVE" : "OFFLINE"}
-          </div>
-        </div>
-
-        <div className="room-code-card">
+      <div className="main-card dashboard-card host-card">
+        <div className="room-code-card host-room-card">
           <p className="room-code-label">Room Code</p>
           <div className="room-code-value">{currentRoom || "------"}</div>
+
+          <div className={`live-pill host-pill ${isMicOn ? "live" : "offline"}`}>
+            {isMicOn ? "LIVE" : "OFFLINE"}
+          </div>
         </div>
 
         {currentRoom && (
@@ -49,52 +42,23 @@ function HostDashboard({
           </div>
         )}
 
-        <div className="dashboard-grid">
-          <div className="panel-card">
-            <h2>Broadcast Controls</h2>
-            <div className="button-stack">
-              <button className="primary-button" onClick={startMicrophone}>
-                Start Broadcasting
-              </button>
-              <button className="secondary-button" onClick={stopMicrophone}>
-                Stop Broadcasting
-              </button>
-              <button className="ghost-button" onClick={leaveRoom}>
-                End Room
-              </button>
-            </div>
-          </div>
+        <div className="panel-card">
+          <h2>Broadcast Controls</h2>
 
-          <div className="panel-card">
-            <h2>Share Room</h2>
-            <div className="button-stack">
-              <button className="primary-button" onClick={copyRoomCode}>
-                Copy Room Code
-              </button>
-              <button className="secondary-button" onClick={copyJoinLink}>
-                Copy Join Link
-              </button>
-              <button className="ghost-button" onClick={createRoom}>
-                Create New Room
-              </button>
-            </div>
+          <div className="button-stack">
+            <button className="primary-button" onClick={toggleBroadcast}>
+              {isMicOn ? "Stop Broadcasting" : "Start Broadcasting"}
+            </button>
+
+            <button className="ghost-button" onClick={leaveRoom}>
+              End Room
+            </button>
           </div>
         </div>
 
-        <div className="stats-row">
-          <div className="stat-card">
-            <span className="stat-label">Broadcast</span>
-            <span className="stat-value">{isMicOn ? "On" : "Off"}</span>
-          </div>
-
-          <div className="stat-card">
-            <span className="stat-label">Listeners</span>
-            <span className="stat-value">{listenerCount}</span>
-          </div>
-        </div>
-
-        <div className="status-banner">
-          <strong>Status:</strong> {message}
+        <div className="stat-card host-listener-card">
+          <span className="stat-label">Listeners</span>
+          <span className="stat-value">{listenerCount}</span>
         </div>
       </div>
     </div>

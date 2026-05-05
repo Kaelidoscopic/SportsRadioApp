@@ -273,6 +273,26 @@ input {
   margin-top: 0.25rem;
 }
 
+.host-card {
+  max-width: 560px;
+}
+
+.host-room-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.host-pill {
+  margin-top: 0.25rem;
+}
+
+.host-listener-card {
+  margin-top: 1.5rem;
+  text-align: center;
+}
+
 @media (max-width: 700px) {
   .page-shell {
     padding: 1rem;
