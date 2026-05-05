@@ -41,7 +41,9 @@ function App() {
       setRoomId(cleanRoomCode);
       setMessage(`Joining room ${cleanRoomCode}...`);
 
-      socket.emit("join-room", cleanRoomCode);
+      setTimeout(() => {
+        joinRoom(cleanRoomCode);
+      }, 300);
     }
   }, []);
 
@@ -334,7 +336,8 @@ function App() {
   };
 
   const joinRoom = (overrideRoomId) => {
-    const codeToJoin = overrideRoomId || roomId;
+    const codeToJoin =
+      typeof overrideRoomId === "string" ? overrideRoomId : roomId;
 
     if (!codeToJoin.trim()) {
       setMessage("Enter a room code first.");
