@@ -19,6 +19,14 @@ const io = new Server(server, {
 });
 
 const rooms = {};
+const closeRoom = (roomId, reason) => {
+  if (!rooms[roomId]) return;
+
+  io.to(roomId).emit("room-closed", reason);
+  delete rooms[roomId];
+
+  console.log(`Room ${roomId} closed: ${reason}`);
+};
 
 io.on("connection", (socket) => {
   console.log(`User connected: ${socket.id}`);
@@ -83,10 +91,7 @@ io.on("connection", (socket) => {
       const room = rooms[roomId];
 
       if (room.hostSocketId === socket.id) {
-        io.to(roomId).emit("room-closed", "Host left. Room closed.");
-        socket.leave(roomId);
-        delete rooms[roomId];
-        console.log(`Room ${roomId} closed by host.`);
+        closeRoom(roomId, "Host ended the room.");
         return;
       }
 
@@ -154,9 +159,7 @@ io.on("connection", (socket) => {
       const room = rooms[roomId];
 
       if (room.hostSocketId === socket.id) {
-        io.to(roomId).emit("room-closed", "Host disconnected. Room closed.");
-        delete rooms[roomId];
-        console.log(`Room ${roomId} deleted because host left.`);
+        closeRoom(roomId, "Host disconnected. Room closed.");
         break;
       }
 

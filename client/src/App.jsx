@@ -217,6 +217,9 @@ function App() {
       setRole("");
       setMembers([]);
       setMessage(msg);
+      setIsHostLive(false);
+      setIsListening(false);
+      setUserPausedListening(false);
     });
 
     socket.on("left-room", (msg) => {
@@ -226,6 +229,9 @@ function App() {
       setRole("");
       setMembers([]);
       setMessage(msg);
+      setIsHostLive(false);
+      setIsListening(false);
+      setUserPausedListening(false);
     });
 
     socket.on("error-message", (msg) => {
