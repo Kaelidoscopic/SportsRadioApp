@@ -43,8 +43,12 @@ function App() {
     const roomFromUrl = params.get("room");
 
     if (roomFromUrl) {
-      setRoomId(roomFromUrl);
-      setMessage(`Room code ${roomFromUrl} loaded from link.`);
+      const cleanRoomCode = roomFromUrl.trim();
+
+      setRoomId(cleanRoomCode);
+      setMessage(`Joining room ${cleanRoomCode}...`);
+
+      socket.emit("join-room", cleanRoomCode);
     }
   }, []);
 
@@ -198,7 +202,7 @@ function App() {
       setCurrentRoom(data.roomId);
       setRole(data.role);
       setMembers(data.members);
-      setMessage(`Joined room ${data.roomId}.`);
+      setMessage(`Connected to room ${data.roomId}. Tap Start Listening to hear audio.`);
     });
 
     socket.on("room-updated", (data) => {
