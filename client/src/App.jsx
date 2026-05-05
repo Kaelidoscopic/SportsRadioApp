@@ -48,7 +48,7 @@ function App() {
     if (role === "listener" && isHostLive && !isListening) {
       startListening();
     }
-  }, [isHostLive, role]);
+  }, [isHostLive, role, isListening]);
 
   const playRemoteAudio = async () => {
     if (!remoteAudioRef.current) return;
@@ -129,7 +129,6 @@ function App() {
     }
 
     setIsListening(false);
-    socket.off("broadcast-status");
   };
 
   const cleanupAllConnections = () => {
@@ -312,6 +311,7 @@ function App() {
       socket.off("webrtc-offer");
       socket.off("webrtc-answer");
       socket.off("webrtc-ice-candidate");
+      socket.off("broadcast-status");
     };
   }, []);
 
@@ -433,7 +433,7 @@ function App() {
     }
   };
 
-  const listenerCount = role === "host" ? Math.max(members.length - 1, 0) : Math.max(members.length - 1, 0);
+  const listenerCount = Math.max(members.length - 1, 0);
 
   if (!role) {
     return (
