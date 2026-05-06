@@ -26,6 +26,7 @@ function App() {
 
   const [audioInputs, setAudioInputs] = useState([]);
   const [selectedAudioInput, setSelectedAudioInput] = useState("");
+  const [broadcastSourceType, setBroadcastSourceType] = useState("input");
 
   const rtcConfig = {
     iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
@@ -400,20 +401,39 @@ function App() {
     if (roleRef.current !== "host") return;
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          deviceId: selectedAudioInput
-            ? { exact: selectedAudioInput }
-            : undefined,
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false
+      let stream;
+
+      if (broadcastSourceType === "tab") {
+        const displayStream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: true
+        });
+
+        const audioTracks = displayStream.getAudioTracks();
+
+        if (audioTracks.length === 0) {
+          setMessage("No tab/screen audio was shared. Enable audio sharing when prompted.");
+          displayStream.getTracks().forEach((track) => track.stop());
+          return;
         }
-      });
+
+        stream = new MediaStream(audioTracks);
+
+        displayStream.getVideoTracks().forEach((track) => track.stop());
+      } else {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            deviceId: selectedAudioInput
+              ? { exact: selectedAudioInput }
+              : undefined,
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false
+          }
+        });
+      }
 
       const audioTracks = stream.getAudioTracks();
-
-      console.log("Audio tracks:", audioTracks);
 
       if (audioTracks.length === 0) {
         setMessage("No audio input detected.");
@@ -426,17 +446,12 @@ function App() {
       setIsBroadcasting(true);
       setIsMuted(false);
       setIsHostLive(true);
-
       socket.emit("broadcast-started");
 
-      const listenerIds = members.filter(
-        (memberId) => memberId !== socket.id
-      );
+      const listenerIds = members.filter((memberId) => memberId !== socket.id);
 
-      if (listenerIds.length > 0) {
-        for (const listenerId of listenerIds) {
-          await sendOfferToListener(listenerId, stream);
-        }
+      for (const listenerId of listenerIds) {
+        await sendOfferToListener(listenerId, stream);
       }
 
       setMessage("Broadcast is live.");
@@ -445,8 +460,8 @@ function App() {
         stopBroadcasting();
       };
     } catch (error) {
-      console.error("Audio input capture failed:", error);
-      setMessage("Could not access selected audio input.");
+      console.error("Audio capture failed:", error);
+      setMessage("Could not access selected audio source.");
     }
   };
 
@@ -544,6 +559,7 @@ function App() {
     return (
       <HostDashboard
         currentRoom={currentRoom}
+        venueId={venueId}
         isBroadcasting={isBroadcasting}
         isMuted={isMuted}
         leaveRoom={leaveRoom}
@@ -553,6 +569,8 @@ function App() {
         audioInputs={audioInputs}
         selectedAudioInput={selectedAudioInput}
         setSelectedAudioInput={setSelectedAudioInput}
+        broadcastSourceType={broadcastSourceType}
+        setBroadcastSourceType={setBroadcastSourceType}
       />
     );
   }

@@ -10,7 +10,9 @@ function HostDashboard({
   toggleMute,
   audioInputs,
   selectedAudioInput,
-  setSelectedAudioInput
+  setSelectedAudioInput,
+  broadcastSourceType,
+  setBroadcastSourceType
 }) {
   const joinLink = currentRoom
     ? `${import.meta.env.VITE_FRONTEND_URL}/?room=${currentRoom}`
@@ -46,20 +48,33 @@ function HostDashboard({
         <div className="panel-card host-controls">
           {!isBroadcasting && (
             <p className="host-hint">
-              Choose the tab or screen playing audio. Enable audio sharing when prompted.
+              Choose an audio input device, or share audio from a browser tab or screen.
             </p>
           )}
           <select
             className="audio-select"
-            value={selectedAudioInput}
-            onChange={(e) => setSelectedAudioInput(e.target.value)}
+            value={broadcastSourceType}
+            onChange={(e) => setBroadcastSourceType(e.target.value)}
+            disabled={isBroadcasting}
           >
-            {audioInputs.map((device) => (
-              <option key={device.deviceId} value={device.deviceId}>
-                {device.label || "Audio Input"}
-              </option>
-            ))}
+            <option value="input">Audio Input Device</option>
+            <option value="tab">Browser Tab / Screen Audio</option>
           </select>
+
+          {broadcastSourceType === "input" && (
+            <select
+              className="audio-select"
+              value={selectedAudioInput}
+              onChange={(e) => setSelectedAudioInput(e.target.value)}
+              disabled={isBroadcasting}
+            >
+              {audioInputs.map((device) => (
+                <option key={device.deviceId} value={device.deviceId}>
+                  {device.label || "Audio Input"}
+                </option>
+              ))}
+            </select>
+          )}
 
           <button className="primary-button" onClick={toggleBroadcast}>
             {isBroadcasting ? "Stop Broadcasting" : "Choose Audio Source"}
