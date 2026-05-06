@@ -379,7 +379,7 @@ function App() {
         audio: true
       });
 
-      const audioTracks = fullStream.getAudioTracks();
+      const audioTracks = stream.getAudioTracks();
 
       if (audioTracks.length === 0) {
         setIsBroadcasting(false);
