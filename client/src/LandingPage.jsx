@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import QRScanner from "./QRScanner";
 
 function LandingPage({
@@ -12,15 +12,6 @@ function LandingPage({
   const [scannerOpen, setScannerOpen] = useState(false);
 
   const savedHostCode = localStorage.getItem("venueAudioHostCode") || "";
-
-  useEffect(() => {
-    const isHostDevice = localStorage.getItem("venueAudioHostMode") === "true";
-
-    if (isHostDevice && savedHostCode) {
-      setRoomId(savedHostCode);
-      setMode("host");
-    }
-  }, [savedHostCode, setRoomId]);
 
   const cleanRoomCode = (code) => {
     return String(code || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -114,9 +105,8 @@ function LandingPage({
             </button>
 
             <p className="small-note">
-              Leave the code blank to generate a random one. After a room is
-              created, you can save that active room as the host device from the
-              host dashboard.
+              Leave the code blank to generate a random one. Successful room
+              codes are remembered so you can reuse them later.
             </p>
           </div>
         </div>

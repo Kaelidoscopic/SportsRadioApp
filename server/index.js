@@ -46,6 +46,22 @@ const closeRoom = (roomId, reason) => {
   console.log(`Room ${roomId} closed: ${reason}`);
 };
 
+const findRoomForSocket = (socketId) => {
+  for (const roomId in rooms) {
+    const room = rooms[roomId];
+
+    if (room.hostSocketId === socketId) {
+      return { roomId, room, role: "host" };
+    }
+
+    if (room.listeners.includes(socketId)) {
+      return { roomId, room, role: "listener" };
+    }
+  }
+
+  return null;
+};
+
 const sanitizeRoomCode = (code) => {
   return code.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
 };
@@ -153,32 +169,44 @@ io.on("connection", (socket) => {
   });
 
   socket.on("leave-room", () => {
-    for (const roomId in rooms) {
-      const room = rooms[roomId];
+    const match = findRoomForSocket(socket.id);
 
-      if (room.hostSocketId === socket.id) {
-        closeRoom(roomId, "Host ended the room.");
-        return;
-      }
-
-      const index = room.listeners.indexOf(socket.id);
-
-      if (index !== -1) {
-        room.listeners.splice(index, 1);
-        socket.leave(roomId);
-
-        const members = [room.hostSocketId, ...room.listeners];
-
-        io.to(roomId).emit("room-updated", { roomId, members });
-        socket.emit("left-room", "You left the room.");
-
-        console.log(`${socket.id} left room ${roomId}`);
-        emitRoomsList();
-        return;
-      }
+    if (!match) {
+      socket.emit("error-message", "You are not currently in a room.");
+      return;
     }
 
-    socket.emit("error-message", "You are not currently in a room.");
+    if (match.role === "host") {
+      closeRoom(match.roomId, "Host ended the room.");
+      return;
+    }
+
+    const index = match.room.listeners.indexOf(socket.id);
+
+    if (index !== -1) {
+      match.room.listeners.splice(index, 1);
+      socket.leave(match.roomId);
+
+      const members = [match.room.hostSocketId, ...match.room.listeners];
+
+      io.to(match.roomId).emit("room-updated", { roomId: match.roomId, members });
+      socket.emit("left-room", "You left the room.");
+
+      console.log(`${socket.id} left room ${match.roomId}`);
+      emitRoomsList();
+      return;
+    }
+  });
+
+  socket.on("end-room", () => {
+    const match = findRoomForSocket(socket.id);
+
+    if (!match || match.role !== "host") {
+      socket.emit("error-message", "Only the host can end a room.");
+      return;
+    }
+
+    closeRoom(match.roomId, "Host ended the room.");
   });
 
   socket.on("request-stream", () => {

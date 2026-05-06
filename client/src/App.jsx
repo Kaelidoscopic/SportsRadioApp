@@ -15,7 +15,7 @@ function App() {
   const [currentRoom, setCurrentRoom] = useState("");
   const [role, setRole] = useState("");
   const [members, setMembers] = useState([]);
-  const [message, setMessage] = useState("Welcome.");
+  const [, setMessage] = useState("Welcome.");
 
   const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [isHostLive, setIsHostLive] = useState(false);
@@ -37,13 +37,17 @@ function App() {
   const localStreamRef = useRef(null);
   const remoteAudioRef = useRef(null);
   const roleRef = useRef("");
+  const currentRoomRef = useRef("");
   const listenerPeerRef = useRef(null);
   const hostPeerConnectionsRef = useRef({});
-  const autoStartedRef = useRef(false);
 
   useEffect(() => {
     roleRef.current = role;
   }, [role]);
+
+  useEffect(() => {
+    currentRoomRef.current = currentRoom;
+  }, [currentRoom]);
 
   useEffect(() => {
     localStorage.setItem("venueAudioSourceType", broadcastSourceType);
@@ -92,11 +96,12 @@ function App() {
   };
 
   useEffect(() => {
-    loadAudioInputs();
+    const loadTimer = setTimeout(loadAudioInputs, 0);
 
     navigator.mediaDevices.addEventListener("devicechange", loadAudioInputs);
 
     return () => {
+      clearTimeout(loadTimer);
       navigator.mediaDevices.removeEventListener(
         "devicechange",
         loadAudioInputs
@@ -188,6 +193,19 @@ function App() {
     cleanupListenerConnection();
   };
 
+  const resetRoomState = () => {
+    currentRoomRef.current = "";
+    roleRef.current = "";
+    setCurrentRoom("");
+    setRole("");
+    setMembers([]);
+    setIsBroadcasting(false);
+    setIsHostLive(false);
+    setIsMuted(false);
+    setIsListening(false);
+    setUserPausedListening(false);
+  };
+
   const stopBroadcastTracksOnly = () => {
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => track.stop());
@@ -231,34 +249,9 @@ function App() {
   };
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const roomFromUrl = params.get("room");
-
-    if (roomFromUrl) {
-      const cleanRoomCode = roomFromUrl.trim();
-
-      setRoomId(cleanRoomCode);
-      setMessage(`Joining room ${cleanRoomCode}...`);
-
-      setTimeout(() => {
-        joinRoom(cleanRoomCode);
-      }, 300);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (
-      role === "listener" &&
-      isHostLive &&
-      !isListening &&
-      !userPausedListening
-    ) {
-      startListening();
-    }
-  }, [isHostLive, role, isListening, userPausedListening]);
-
-  useEffect(() => {
     socket.on("room-created", (data) => {
+      currentRoomRef.current = data.roomId;
+      roleRef.current = data.role;
       setCurrentRoom(data.roomId);
       setRoomId(data.roomId);
       setRole(data.role);
@@ -269,6 +262,8 @@ function App() {
     });
 
     socket.on("joined-room", (data) => {
+      currentRoomRef.current = data.roomId;
+      roleRef.current = data.role;
       setCurrentRoom(data.roomId);
       setRole(data.role);
       setMembers(data.members);
@@ -293,35 +288,26 @@ function App() {
     socket.on("room-closed", (msg) => {
       cleanupAllConnections();
       stopBroadcastTracksOnly();
-      setCurrentRoom("");
-      setRole("");
-      setMembers([]);
-      setIsHostLive(false);
-      setIsListening(false);
-      setUserPausedListening(false);
+      localStorage.removeItem("venueAudioHostMode");
+      resetRoomState();
       setMessage(msg);
     });
 
     socket.on("left-room", (msg) => {
       cleanupAllConnections();
       stopBroadcastTracksOnly();
-      setCurrentRoom("");
-      setRole("");
-      setMembers([]);
-      setIsHostLive(false);
-      setIsListening(false);
-      setUserPausedListening(false);
+      resetRoomState();
       setMessage(msg);
     });
 
     socket.on("connect", () => {
-      if (roleRef.current === "host" && currentRoom) {
-        socket.emit("recover-host-room", currentRoom);
+      if (roleRef.current === "host" && currentRoomRef.current) {
+        socket.emit("recover-host-room", currentRoomRef.current);
         setMessage("Reconnected to host room.");
       }
 
-      if (roleRef.current === "listener" && currentRoom) {
-        socket.emit("join-room", currentRoom);
+      if (roleRef.current === "listener" && currentRoomRef.current) {
+        socket.emit("join-room", currentRoomRef.current);
         setMessage("Reconnected to room.");
       }
     });
@@ -430,67 +416,6 @@ function App() {
     };
   }, []);
 
-  useEffect(() => {
-    const savedHostCode = getSavedHostCode();
-
-    if (!isHostDeviceMode() || !savedHostCode || role || currentRoom) {
-      return;
-    }
-
-    setRoomId(savedHostCode);
-    setBroadcastSourceType(localStorage.getItem("venueAudioSourceType") || "input");
-    setMessage(`Host device mode loaded for room ${savedHostCode}.`);
-
-    socket.emit("create-room", savedHostCode);
-  }, [role, currentRoom]);
-
-  useEffect(() => {
-    if (!isHostDeviceMode()) return;
-    if (role !== "host") return;
-    if (!currentRoom) return;
-    if (isBroadcasting) return;
-    if (autoStartedRef.current) return;
-
-    if (broadcastSourceType === "input" && !selectedAudioInput) {
-      setMessage("Host device mode loaded, but no saved audio input was found.");
-      return;
-    }
-
-    autoStartedRef.current = true;
-
-    setTimeout(() => {
-      startBroadcasting();
-    }, 500);
-  }, [role, currentRoom, isBroadcasting, selectedAudioInput, broadcastSourceType]);
-
-  const isHostDeviceMode = () => {
-    return localStorage.getItem("venueAudioHostMode") === "true";
-  };
-
-  const getSavedHostCode = () => {
-    return localStorage.getItem("venueAudioHostCode") || "";
-  };
-
-  const saveHostDeviceSettings = () => {
-    const cleanCode = roomId.trim().toUpperCase();
-
-    if (!cleanCode) {
-      setMessage("Enter a room code before saving this host device.");
-      return;
-    }
-
-    localStorage.setItem("venueAudioHostMode", "true");
-    localStorage.setItem("venueAudioHostCode", cleanCode);
-    localStorage.setItem("venueAudioSourceType", broadcastSourceType);
-
-    if (selectedAudioInput) {
-      localStorage.setItem("venueAudioInputId", selectedAudioInput);
-    }
-
-    setRoomId(cleanCode);
-    setMessage(`Saved this device as host ${cleanCode}.`);
-  };
-
   const createRoom = (overrideCode) => {
     const code =
       typeof overrideCode === "string" ? overrideCode.trim() : roomId.trim();
@@ -511,42 +436,20 @@ function App() {
   };
 
   const leaveRoom = () => {
-    autoStartedRef.current = true;
+    const leavingAsHost = roleRef.current === "host";
 
     cleanupAllConnections();
     stopBroadcastTracksOnly();
 
-    socket.emit("leave-room");
-
-    setCurrentRoom("");
-    setRole("");
-    setMembers([]);
-    setIsBroadcasting(false);
-    setUserPausedListening(false);
-  };
-
-  const disableHostDeviceMode = () => {
-    localStorage.removeItem("venueAudioHostMode");
-
-    if (autoStartedRef.current !== undefined) {
-      autoStartedRef.current = true;
-    }
-
-    cleanupAllConnections();
-    stopBroadcastTracksOnly();
-
-    if (roleRef.current === "host" && currentRoom) {
+    if (leavingAsHost) {
+      localStorage.removeItem("venueAudioHostMode");
+      socket.emit("end-room");
+    } else {
       socket.emit("leave-room");
     }
 
-    setCurrentRoom("");
-    setRole("");
-    setMembers([]);
-    setIsBroadcasting(false);
-    setIsHostLive(false);
-    setIsMuted(false);
-    setUserPausedListening(false);
-    setMessage("Host device mode disabled.");
+    resetRoomState();
+    setMessage(leavingAsHost ? "Room ended." : "You left the room.");
   };
 
   const startBroadcasting = async () => {
@@ -696,6 +599,32 @@ function App() {
     setMessage("Reconnecting audio...");
   };
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const roomFromUrl = params.get("room");
+
+    if (roomFromUrl) {
+      const cleanRoomCode = roomFromUrl.trim();
+
+      setTimeout(() => {
+        setRoomId(cleanRoomCode);
+        setMessage(`Joining room ${cleanRoomCode}...`);
+        joinRoom(cleanRoomCode);
+      }, 300);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (
+      role === "listener" &&
+      isHostLive &&
+      !isListening &&
+      !userPausedListening
+    ) {
+      setTimeout(startListening, 0);
+    }
+  }, [isHostLive, role, isListening, userPausedListening]);
+
   if (!role) {
     return (
       <LandingPage
@@ -724,8 +653,6 @@ function App() {
         broadcastSourceType={broadcastSourceType}
         setBroadcastSourceType={setBroadcastSourceType}
         refreshAudioInputs={refreshAudioInputs}
-        saveHostDeviceSettings={saveHostDeviceSettings}
-        disableHostDeviceMode={disableHostDeviceMode}
       />
     );
   }
