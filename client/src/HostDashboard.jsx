@@ -3,9 +3,11 @@ import { QRCodeSVG } from "qrcode.react";
 function HostDashboard({
   currentRoom,
   isMicOn,
+  isMuted,
   leaveRoom,
   startMicrophone,
-  stopMicrophone
+  stopMicrophone,
+  toggleMute
 }) {
   const joinLink = currentRoom
     ? `${import.meta.env.VITE_FRONTEND_URL}/?room=${currentRoom}`
@@ -26,7 +28,7 @@ function HostDashboard({
           <div className="room-code-value">{currentRoom || "------"}</div>
 
           <div className={`live-pill ${isMicOn ? "live" : "offline"}`}>
-            {isMicOn ? "LIVE" : "OFFLINE"}
+            {isMicOn ? (isMuted ? "MUTED" : "LIVE") : "OFFLINE"}
           </div>
         </div>
 
@@ -42,6 +44,12 @@ function HostDashboard({
           <button className="primary-button" onClick={toggleBroadcast}>
             {isMicOn ? "Stop Broadcasting" : "Start Broadcasting"}
           </button>
+
+          {isMicOn && (
+            <button className="secondary-button" onClick={toggleMute}>
+              {isMuted ? "Unmute Broadcast" : "Mute Broadcast"}
+            </button>
+          )}
 
           <button className="ghost-button" onClick={leaveRoom}>
             End Room

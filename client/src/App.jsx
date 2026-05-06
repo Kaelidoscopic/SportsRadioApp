@@ -14,6 +14,7 @@ function App() {
   const [message, setMessage] = useState("Welcome.");
   const [isMicOn, setIsMicOn] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
 
   const localStreamRef = useRef(null);
   const remoteAudioRef = useRef(null);
@@ -368,6 +369,7 @@ function App() {
 
       localStreamRef.current = stream;
       setIsMicOn(true);
+      setIsMuted(false);
 
       setIsHostLive(true);
       socket.emit("broadcast-started");
@@ -395,9 +397,28 @@ function App() {
     cleanupHostConnections();
 
     setIsHostLive(false);
+    setIsMuted(false);
     socket.emit("broadcast-stopped");
 
     setMessage("Broadcast stopped.");
+  };
+
+  const toggleMute = () => {
+    if (roleRef.current !== "host") return;
+
+    if (!localStreamRef.current) {
+      setMessage("Start broadcasting before muting.");
+      return;
+    }
+
+    const newMutedState = !isMuted;
+
+    localStreamRef.current.getAudioTracks().forEach((track) => {
+      track.enabled = !newMutedState;
+    });
+
+    setIsMuted(newMutedState);
+    setMessage(newMutedState ? "Broadcast muted." : "Broadcast unmuted.");
   };
 
   const startListening = async () => {
@@ -480,9 +501,11 @@ function App() {
       <HostDashboard
         currentRoom={currentRoom}
         isMicOn={isMicOn}
+        isMuted={isMuted}
         leaveRoom={leaveRoom}
         startMicrophone={startMicrophone}
         stopMicrophone={stopMicrophone}
+        toggleMute={toggleMute}
       />
     );
   }
