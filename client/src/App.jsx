@@ -156,8 +156,15 @@ function App() {
 
   const sendOfferToListener = async (listenerSocketId, streamToSend) => {
     try {
-      if (hostPeerConnectionsRef.current[listenerSocketId]) {
-        hostPeerConnectionsRef.current[listenerSocketId].close();
+      const existingPc = hostPeerConnectionsRef.current[listenerSocketId];
+
+      if (
+        existingPc &&
+        existingPc.connectionState !== "closed" &&
+        existingPc.signalingState !== "closed"
+      ) {
+        console.log("Already have peer connection for listener:", listenerSocketId);
+        return;
       }
 
       const pc = createHostPeerConnection(listenerSocketId);
@@ -197,12 +204,6 @@ function App() {
       setMessage(`Connected to room ${data.roomId}.`);
       setIsHostLive(Boolean(data.isBroadcasting));
       setUserPausedListening(false);
-
-      if (data.isBroadcasting) {
-        setTimeout(() => {
-          socket.emit("request-stream");
-        }, 500);
-      }
     });
 
     socket.on("broadcast-status", (data) => {
@@ -381,19 +382,13 @@ function App() {
 
       const audioTracks = stream.getAudioTracks();
 
+      console.log("Audio tracks:", audioTracks);
+
       if (audioTracks.length === 0) {
         setIsBroadcasting(false);
         setIsHostLive(false);
         socket.emit("broadcast-stopped");
         setMessage("No audio was shared. Use Chrome/Edge and enable Share tab audio.");
-        fullStream.getTracks().forEach((track) => track.stop());
-        return;
-      }
-
-      console.log("Audio tracks:", audioTracks);
-
-      if (audioTracks.length === 0) {
-        setMessage("No audio was shared. Choose a tab/window and enable Share audio.");
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
@@ -505,38 +500,6 @@ function App() {
 
     socket.emit("request-stream");
     setMessage("Reconnecting audio...");
-  };
-
-  const copyRoomCode = async () => {
-    if (!currentRoom) {
-      setMessage("No room code available.");
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(currentRoom);
-      setMessage(`Copied room code: ${currentRoom}`);
-    } catch (error) {
-      console.error("Failed to copy room code:", error);
-      setMessage("Could not copy room code.");
-    }
-  };
-
-  const copyJoinLink = async () => {
-    if (!currentRoom) {
-      setMessage("No join link available.");
-      return;
-    }
-
-    const joinLink = `${import.meta.env.VITE_FRONTEND_URL}/?room=${currentRoom}`;
-
-    try {
-      await navigator.clipboard.writeText(joinLink);
-      setMessage("Copied join link.");
-    } catch (error) {
-      console.error("Failed to copy join link:", error);
-      setMessage("Could not copy join link.");
-    }
   };
 
   if (!role) {
