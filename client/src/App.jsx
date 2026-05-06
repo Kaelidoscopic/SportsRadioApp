@@ -260,9 +260,12 @@ function App() {
   useEffect(() => {
     socket.on("room-created", (data) => {
       setCurrentRoom(data.roomId);
+      setRoomId(data.roomId);
       setRole(data.role);
       setMembers(data.members);
       setMessage(`Room ${data.roomId} created.`);
+
+      localStorage.setItem("venueAudioHostCode", data.roomId);
     });
 
     socket.on("joined-room", (data) => {

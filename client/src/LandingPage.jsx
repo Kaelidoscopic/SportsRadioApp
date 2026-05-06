@@ -23,21 +23,12 @@ function LandingPage({
   }, [savedHostCode, setRoomId]);
 
   const cleanRoomCode = (code) => {
-    return code.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    return String(code || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
   };
 
   const usePreviousCode = () => {
     if (!savedHostCode) return;
     setRoomId(savedHostCode);
-  };
-
-  const saveHostDevice = () => {
-    const cleanCode = cleanRoomCode(roomId);
-    if (!cleanCode) return;
-
-    localStorage.setItem("venueAudioHostCode", cleanCode);
-    localStorage.setItem("venueAudioHostMode", "true");
-    setRoomId(cleanCode);
   };
 
   const resetSavedHost = () => {
@@ -54,13 +45,13 @@ function LandingPage({
     createRoom(cleanCode);
   };
 
-  const handleSaveAsHostDevice = () => {
-    saveHostDevice();
+  const handleJoinRoom = () => {
+    joinRoom(cleanRoomCode(roomId));
   };
 
   const handleJoinKeyDown = (e) => {
     if (e.key === "Enter") {
-      joinRoom();
+      handleJoinRoom();
     }
   };
 
@@ -118,21 +109,14 @@ function LandingPage({
               Start Room
             </button>
 
-            <button
-              className="secondary-button"
-              onClick={handleSaveAsHostDevice}
-              disabled={!roomId.trim()}
-            >
-              Save as Host Device
-            </button>
-
             <button className="ghost-button" onClick={resetSavedHost}>
               Reset Saved Host
             </button>
 
             <p className="small-note">
-              Leave the code blank to generate a random one. Saving as a host
-              device stores this room code for future use.
+              Leave the code blank to generate a random one. After a room is
+              created, you can save that active room as the host device from the
+              host dashboard.
             </p>
           </div>
         </div>
@@ -150,9 +134,7 @@ function LandingPage({
 
           <div className="brand-block centered-brand">
             <h1 className="app-title">Join Audio</h1>
-            <p className="app-subtitle">
-              Enter a code or scan a QR code.
-            </p>
+            <p className="app-subtitle">Enter a code or scan a QR code.</p>
           </div>
 
           <div className="compact-actions">
@@ -165,7 +147,7 @@ function LandingPage({
               onKeyDown={handleJoinKeyDown}
             />
 
-            <button className="primary-button" onClick={joinRoom}>
+            <button className="primary-button" onClick={handleJoinRoom}>
               Join Audio
             </button>
 
@@ -215,9 +197,7 @@ function LandingPage({
       <div className="main-card landing-card compact-landing">
         <div className="brand-block centered-brand">
           <h1 className="app-title">Venue Audio</h1>
-          <p className="app-subtitle">
-            Hear live audio from a nearby screen.
-          </p>
+          <p className="app-subtitle">Hear live audio from a nearby screen.</p>
         </div>
 
         <div className="compact-actions">
@@ -227,6 +207,7 @@ function LandingPage({
               if (!roomId && savedHostCode) {
                 setRoomId(savedHostCode);
               }
+
               setMode("host");
             }}
           >
