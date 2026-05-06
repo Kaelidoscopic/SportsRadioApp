@@ -449,6 +449,27 @@ button:disabled {
   border: 1px solid rgba(239, 68, 68, 0.35);
 }
 
+.back-button {
+  background: transparent;
+  color: #aeb6c3;
+  border: none;
+  cursor: pointer;
+  margin-bottom: 1rem;
+  padding: 0;
+  font-size: 0.95rem;
+}
+
+.back-button:hover {
+  color: #f3f4f6;
+}
+
+.small-note {
+  color: #7f8a9a;
+  font-size: 0.85rem;
+  text-align: center;
+  margin: 0.25rem 0 0;
+}
+
 @media (max-width: 700px) {
   .page-shell {
     padding: 1rem;
