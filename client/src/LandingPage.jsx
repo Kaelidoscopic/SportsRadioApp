@@ -5,6 +5,7 @@ function LandingPage({ roomId, setRoomId, createRoom, joinRoom }) {
   const [mode, setMode] = useState(null);
   const [scannerOpen, setScannerOpen] = useState(false);
   const savedHostCode = localStorage.getItem("venueAudioHostCode") || "";
+  const [autoCreateAttempted, setAutoCreateAttempted] = useState(false);
 
   const handleJoinKeyDown = (e) => {
     if (e.key === "Enter") {
@@ -48,6 +49,24 @@ function LandingPage({ roomId, setRoomId, createRoom, joinRoom }) {
     }
   }, []);
 
+  useEffect(() => {
+    const isHostDevice = localStorage.getItem("venueAudioHostMode") === "true";
+    const savedCode = localStorage.getItem("venueAudioHostCode");
+
+    if (
+      mode === "host" &&
+      isHostDevice &&
+      savedCode &&
+      !autoCreateAttempted
+    ) {
+      setAutoCreateAttempted(true);
+
+      setTimeout(() => {
+        createRoom(savedCode);
+      }, 300);
+    }
+  }, [mode, autoCreateAttempted, createRoom]);
+
   if (mode === "host") {
     return (
       <div className="page-shell">
@@ -71,6 +90,10 @@ function LandingPage({ roomId, setRoomId, createRoom, joinRoom }) {
               value={roomId}
               onChange={(e) => setRoomId(e.target.value.toUpperCase())}
             />
+
+            <p className="small-note">
+              Leave the code blank to generate a random one.
+            </p>
 
             {savedHostCode && (
               <button
@@ -99,10 +122,6 @@ function LandingPage({ roomId, setRoomId, createRoom, joinRoom }) {
               Start Room
             </button>
 
-            <p className="small-note">
-              Leave the code blank to generate a random one.
-            </p>
-
             <button
               className="secondary-button"
               onClick={() => {
@@ -113,6 +132,10 @@ function LandingPage({ roomId, setRoomId, createRoom, joinRoom }) {
             >
               Save as Host Device
             </button>
+
+            <p className="small-note">
+              Saved host devices will reopen this screen and create the room automatically.
+            </p>
 
             <button
               className="ghost-button"

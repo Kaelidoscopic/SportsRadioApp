@@ -397,8 +397,9 @@ function App() {
     };
   }, []);
 
-  const createRoom = () => {
-    const code = roomId.trim();
+  const createRoom = (overrideCode) => {
+    const code =
+      typeof overrideCode === "string" ? overrideCode.trim() : roomId.trim();
 
     socket.emit("create-room", code || null);
   };
