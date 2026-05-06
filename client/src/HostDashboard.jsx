@@ -7,7 +7,10 @@ function HostDashboard({
   leaveRoom,
   startBroadcasting,
   stopBroadcasting,
-  toggleMute
+  toggleMute,
+  audioInputs,
+  selectedAudioInput,
+  setSelectedAudioInput
 }) {
   const joinLink = currentRoom
     ? `${import.meta.env.VITE_FRONTEND_URL}/?room=${currentRoom}`
@@ -46,6 +49,17 @@ function HostDashboard({
               Choose the tab or screen playing audio. Enable audio sharing when prompted.
             </p>
           )}
+          <select
+            className="audio-select"
+            value={selectedAudioInput}
+            onChange={(e) => setSelectedAudioInput(e.target.value)}
+          >
+            {audioInputs.map((device) => (
+              <option key={device.deviceId} value={device.deviceId}>
+                {device.label || "Audio Input"}
+              </option>
+            ))}
+          </select>
 
           <button className="primary-button" onClick={toggleBroadcast}>
             {isBroadcasting ? "Stop Broadcasting" : "Choose Audio Source"}

@@ -24,6 +24,9 @@ function App() {
   const [userPausedListening, setUserPausedListening] = useState(false);
   const [activeRooms, setActiveRooms] = useState([]);
 
+  const [audioInputs, setAudioInputs] = useState([]);
+  const [selectedAudioInput, setSelectedAudioInput] = useState("");
+
   const rtcConfig = {
     iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
   };
@@ -31,6 +34,10 @@ function App() {
   useEffect(() => {
     roleRef.current = role;
   }, [role]);
+
+  useEffect(() => {
+    loadAudioInputs();
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -186,6 +193,24 @@ function App() {
     } catch (error) {
       console.error("Error creating offer:", error);
       setMessage("Failed to create live audio connection.");
+    }
+  };
+
+  const loadAudioInputs = async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+
+      const audioDevices = devices.filter(
+        (device) => device.kind === "audioinput"
+      );
+
+      setAudioInputs(audioDevices);
+
+      if (audioDevices.length > 0 && !selectedAudioInput) {
+        setSelectedAudioInput(audioDevices[0].deviceId);
+      }
+    } catch (error) {
+      console.error("Failed to load audio devices:", error);
     }
   };
 
@@ -375,9 +400,15 @@ function App() {
     if (roleRef.current !== "host") return;
 
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: true
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          deviceId: selectedAudioInput
+            ? { exact: selectedAudioInput }
+            : undefined,
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false
+        }
       });
 
       const audioTracks = stream.getAudioTracks();
@@ -385,42 +416,37 @@ function App() {
       console.log("Audio tracks:", audioTracks);
 
       if (audioTracks.length === 0) {
-        setIsBroadcasting(false);
-        setIsHostLive(false);
-        socket.emit("broadcast-stopped");
-        setMessage("No audio was shared. Use Chrome/Edge and enable Share tab audio.");
+        setMessage("No audio input detected.");
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
 
-      localStreamRef.current = new MediaStream(audioTracks);
+      localStreamRef.current = stream;
 
       setIsBroadcasting(true);
       setIsMuted(false);
       setIsHostLive(true);
+
       socket.emit("broadcast-started");
 
-      const listenerIds = members.filter((memberId) => memberId !== socket.id);
+      const listenerIds = members.filter(
+        (memberId) => memberId !== socket.id
+      );
 
       if (listenerIds.length > 0) {
         for (const listenerId of listenerIds) {
-          await sendOfferToListener(listenerId, localStreamRef.current);
+          await sendOfferToListener(listenerId, stream);
         }
-        setMessage("Broadcast is live.");
-      } else {
-        setMessage("Broadcast is live. Waiting for listeners.");
       }
 
-      stream.getVideoTracks().forEach((track) => {
-        track.stop();
-      });
+      setMessage("Broadcast is live.");
 
       audioTracks[0].onended = () => {
         stopBroadcasting();
       };
     } catch (error) {
-      console.error("Audio source capture failed:", error);
-      setMessage("Could not start broadcast. Make sure audio sharing is enabled.");
+      console.error("Audio input capture failed:", error);
+      setMessage("Could not access selected audio input.");
     }
   };
 
@@ -518,12 +544,16 @@ function App() {
     return (
       <HostDashboard
         currentRoom={currentRoom}
+        venueId={venueId}
         isBroadcasting={isBroadcasting}
         isMuted={isMuted}
         leaveRoom={leaveRoom}
         startBroadcasting={startBroadcasting}
         stopBroadcasting={stopBroadcasting}
         toggleMute={toggleMute}
+        audioInputs={audioInputs}
+        selectedAudioInput={selectedAudioInput}
+        setSelectedAudioInput={setSelectedAudioInput}
       />
     );
   }
