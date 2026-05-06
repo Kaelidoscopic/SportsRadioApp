@@ -508,10 +508,29 @@ function App() {
   };
 
   const leaveRoom = () => {
+    autoStartedRef.current = true;
+
     cleanupAllConnections();
     stopBroadcastTracksOnly();
+
     socket.emit("leave-room");
+
+    setCurrentRoom("");
+    setRole("");
+    setMembers([]);
+    setIsBroadcasting(false);
     setUserPausedListening(false);
+  };
+
+  const disableHostDeviceMode = () => {
+    localStorage.removeItem("venueAudioHostMode");
+    autoStartedRef.current = true;
+
+    setCurrentRoom("");
+    setRole("");
+    setMembers([]);
+    setIsBroadcasting(false);
+    setMessage("Host device mode disabled.");
   };
 
   const startBroadcasting = async () => {
@@ -690,6 +709,7 @@ function App() {
         setBroadcastSourceType={setBroadcastSourceType}
         refreshAudioInputs={refreshAudioInputs}
         saveHostDeviceSettings={saveHostDeviceSettings}
+        disableHostDeviceMode={disableHostDeviceMode}
       />
     );
   }

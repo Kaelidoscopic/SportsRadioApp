@@ -13,7 +13,9 @@ function HostDashboard({
   setSelectedAudioInput,
   broadcastSourceType,
   setBroadcastSourceType,
-  refreshAudioInputs
+  refreshAudioInputs,
+  saveHostDeviceSettings,
+  disableHostDeviceMode
 }) {
   const joinLink = currentRoom
     ? `${import.meta.env.VITE_FRONTEND_URL}/?room=${currentRoom}`
@@ -113,6 +115,18 @@ function HostDashboard({
               {isMuted ? "Unmute Broadcast" : "Mute Broadcast"}
             </button>
           )}
+
+          <button
+            className="secondary-button"
+            onClick={saveHostDeviceSettings}
+            disabled={isBroadcasting}
+          >
+            Save as Host Device
+          </button>
+
+          <button className="ghost-button" onClick={disableHostDeviceMode}>
+            Disable Host Device Mode
+          </button>
 
           <button className="ghost-button" onClick={leaveRoom}>
             End Room
