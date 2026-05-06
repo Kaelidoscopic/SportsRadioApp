@@ -25,8 +25,13 @@ function App() {
   const [activeRooms, setActiveRooms] = useState([]);
 
   const [audioInputs, setAudioInputs] = useState([]);
-  const [selectedAudioInput, setSelectedAudioInput] = useState("");
-  const [broadcastSourceType, setBroadcastSourceType] = useState("input");
+  const [broadcastSourceType, setBroadcastSourceType] = useState(
+    localStorage.getItem("venueAudioSourceType") || "input"
+  );
+
+  const [selectedAudioInput, setSelectedAudioInput] = useState(
+    localStorage.getItem("venueAudioInputId") || ""
+  );
 
   const rtcConfig = {
     iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
@@ -66,6 +71,16 @@ function App() {
       startListening();
     }
   }, [isHostLive, role, isListening, userPausedListening]);
+
+  useEffect(() => {
+    localStorage.setItem("venueAudioSourceType", broadcastSourceType);
+  }, [broadcastSourceType]);
+
+  useEffect(() => {
+    if (selectedAudioInput) {
+      localStorage.setItem("venueAudioInputId", selectedAudioInput);
+    }
+  }, [selectedAudioInput]);
 
   const playRemoteAudio = async () => {
     if (!remoteAudioRef.current) return;
@@ -199,6 +214,8 @@ function App() {
 
   const loadAudioInputs = async () => {
     try {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+
       const devices = await navigator.mediaDevices.enumerateDevices();
 
       const audioDevices = devices.filter(
@@ -207,7 +224,15 @@ function App() {
 
       setAudioInputs(audioDevices);
 
-      if (audioDevices.length > 0 && !selectedAudioInput) {
+      const savedInputId = localStorage.getItem("venueAudioInputId");
+
+      const savedStillExists = audioDevices.some(
+        (device) => device.deviceId === savedInputId
+      );
+
+      if (savedInputId && savedStillExists) {
+        setSelectedAudioInput(savedInputId);
+      } else if (audioDevices.length > 0) {
         setSelectedAudioInput(audioDevices[0].deviceId);
       }
     } catch (error) {

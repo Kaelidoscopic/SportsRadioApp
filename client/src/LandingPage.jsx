@@ -1,5 +1,6 @@
 import { useState } from "react";
 import QRScanner from "./QRScanner";
+import { useEffect, useState } from "react";
 
 function LandingPage({ roomId, setRoomId, createRoom, joinRoom }) {
   const [mode, setMode] = useState(null);
@@ -37,6 +38,16 @@ function LandingPage({ roomId, setRoomId, createRoom, joinRoom }) {
 
     localStorage.setItem("venueAudioHostCode", roomId.trim().toUpperCase());
   };
+
+  useEffect(() => {
+    const isHostDevice = localStorage.getItem("venueAudioHostMode") === "true";
+    const savedCode = localStorage.getItem("venueAudioHostCode");
+
+    if (isHostDevice && savedCode) {
+      setRoomId(savedCode);
+      setMode("host");
+    }
+  }, []);
 
   if (mode === "host") {
     return (
@@ -92,6 +103,30 @@ function LandingPage({ roomId, setRoomId, createRoom, joinRoom }) {
             <p className="small-note">
               Leave the code blank to generate a random one.
             </p>
+
+            <button
+              className="secondary-button"
+              onClick={() => {
+                saveHostCode();
+                localStorage.setItem("venueAudioHostMode", "true");
+                createRoom();
+              }}
+            >
+              Save as Host Device
+            </button>
+
+            <button
+              className="ghost-button"
+              onClick={() => {
+                localStorage.removeItem("venueAudioHostMode");
+                localStorage.removeItem("venueAudioHostCode");
+                localStorage.removeItem("venueAudioSourceType");
+                localStorage.removeItem("venueAudioInputId");
+                setRoomId("");
+              }}
+            >
+              Reset Saved Host
+            </button>
           </div>
         </div>
       </div>
