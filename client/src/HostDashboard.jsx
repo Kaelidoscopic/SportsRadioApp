@@ -42,7 +42,7 @@ function HostDashboard({
 
         <div className="panel-card host-controls">
           <button className="primary-button" onClick={toggleBroadcast}>
-            {isMicOn ? "Stop Broadcasting" : "Start Broadcasting"}
+            {isMicOn ? "Stop Broadcasting" : "Choose Audio Source"}
           </button>
 
           {isMicOn && (

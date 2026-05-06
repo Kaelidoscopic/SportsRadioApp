@@ -355,22 +355,27 @@ function App() {
     setUserPausedListening(false);
   };
 
-  const startMicrophone = async () => {
+  const startBroadcasting = async () => {
     if (roleRef.current !== "host") return;
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false
-        }
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: true
       });
 
-      localStreamRef.current = stream;
+      const audioTracks = stream.getAudioTracks();
+
+      if (audioTracks.length === 0) {
+        setMessage("No audio was shared. Choose a tab/window and enable Share audio.");
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+
+      localStreamRef.current = new MediaStream(audioTracks);
+
       setIsMicOn(true);
       setIsMuted(false);
-
       setIsHostLive(true);
       socket.emit("broadcast-started");
 
@@ -378,15 +383,23 @@ function App() {
 
       if (listenerIds.length > 0) {
         for (const listenerId of listenerIds) {
-          await sendOfferToListener(listenerId, stream);
+          await sendOfferToListener(listenerId, localStreamRef.current);
         }
         setMessage("Broadcast is live.");
       } else {
-        setMessage("Mic is live. Waiting for listeners.");
+        setMessage("Broadcast is live. Waiting for listeners.");
       }
+
+      stream.getVideoTracks().forEach((track) => {
+        track.stop();
+      });
+
+      audioTracks[0].onended = () => {
+        stopMicrophone();
+      };
     } catch (error) {
-      console.error("Microphone access failed:", error);
-      setMessage("Could not access microphone.");
+      console.error("Audio source capture failed:", error);
+      setMessage("Could not start broadcast. Make sure audio sharing is enabled.");
     }
   };
 
@@ -503,7 +516,7 @@ function App() {
         isMicOn={isMicOn}
         isMuted={isMuted}
         leaveRoom={leaveRoom}
-        startMicrophone={startMicrophone}
+        startMicrophone={startBroadcasting}
         stopMicrophone={stopMicrophone}
         toggleMute={toggleMute}
       />
