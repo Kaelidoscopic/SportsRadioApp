@@ -193,9 +193,15 @@ function App() {
       setCurrentRoom(data.roomId);
       setRole(data.role);
       setMembers(data.members);
-      setMessage(`Connected to room ${data.roomId}. Tap Start Listening to hear audio.`);
+      setMessage(`Connected to room ${data.roomId}.`);
       setIsHostLive(Boolean(data.isBroadcasting));
       setUserPausedListening(false);
+
+      if (data.isBroadcasting) {
+        setTimeout(() => {
+          socket.emit("request-stream");
+        }, 500);
+      }
     });
 
     socket.on("broadcast-status", (data) => {

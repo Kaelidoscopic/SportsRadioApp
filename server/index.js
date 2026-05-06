@@ -212,6 +212,23 @@ io.on("connection", (socket) => {
       }
     }
   });
+
+  socket.on("request-stream", () => {
+    for (const roomId in rooms) {
+      const room = rooms[roomId];
+
+      if (room.listeners.includes(socket.id)) {
+        io.to(room.hostSocketId).emit("listener-joined", {
+          listenerSocketId: socket.id
+        });
+
+        console.log(`${socket.id} requested stream in room ${roomId}`);
+        return;
+      }
+    }
+
+    socket.emit("error-message", "You must be in a room to request audio.");
+  });
 });
 
 app.get("/", (req, res) => {
