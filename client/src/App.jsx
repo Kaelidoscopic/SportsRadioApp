@@ -22,6 +22,7 @@ function App() {
   const hostPeerConnectionsRef = useRef({});
   const [isHostLive, setIsHostLive] = useState(false);
   const [userPausedListening, setUserPausedListening] = useState(false);
+  const [activeRooms, setActiveRooms] = useState([]);
 
   const rtcConfig = {
     iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
@@ -322,6 +323,12 @@ function App() {
       }
     });
 
+    socket.on("rooms-list", (rooms) => {
+      setActiveRooms(rooms);
+    });
+
+    socket.emit("get-rooms");
+
     return () => {
       socket.off("room-created");
       socket.off("joined-room");
@@ -334,6 +341,7 @@ function App() {
       socket.off("webrtc-answer");
       socket.off("webrtc-ice-candidate");
       socket.off("broadcast-status");
+      socket.off("rooms-list");
     };
   }, []);
 
@@ -527,6 +535,7 @@ function App() {
         setRoomId={setRoomId}
         createRoom={createRoom}
         joinRoom={joinRoom}
+        activeRooms={activeRooms}
       />
     );
   }

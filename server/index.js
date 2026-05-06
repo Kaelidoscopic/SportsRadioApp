@@ -19,11 +19,25 @@ const io = new Server(server, {
 });
 
 const rooms = {};
+
+const getPublicRooms = () => {
+  return Object.entries(rooms).map(([roomId, room]) => ({
+    roomId,
+    isBroadcasting: room.isBroadcasting,
+    listenerCount: room.listeners.length
+  }));
+};
+
+const emitRoomsList = () => {
+  io.emit("rooms-list", getPublicRooms());
+};
+
 const closeRoom = (roomId, reason) => {
   if (!rooms[roomId]) return;
 
   io.to(roomId).emit("room-closed", reason);
   delete rooms[roomId];
+  emitRoomsList();
 
   console.log(`Room ${roomId} closed: ${reason}`);
 };
@@ -69,6 +83,7 @@ io.on("connection", (socket) => {
     });
 
     console.log(`Room created: ${roomId}`);
+    emitRoomsList();
   });
 
   socket.on("join-room", (roomId) => {
@@ -104,6 +119,7 @@ io.on("connection", (socket) => {
     });
 
     console.log(`${socket.id} joined room ${roomId}`);
+    emitRoomsList();
   });
 
   socket.on("leave-room", () => {
@@ -129,6 +145,7 @@ io.on("connection", (socket) => {
 
         socket.emit("left-room", "You left the room.");
         console.log(`${socket.id} left room ${roomId}`);
+        emitRoomsList();
         return;
       }
     }
@@ -211,6 +228,7 @@ io.on("connection", (socket) => {
         });
 
         console.log(`Broadcast started in room ${roomId}`);
+        emitRoomsList();
         return;
       }
     }
@@ -228,6 +246,7 @@ io.on("connection", (socket) => {
         });
 
         console.log(`Broadcast stopped in room ${roomId}`);
+        emitRoomsList();
         return;
       }
     }
@@ -248,6 +267,10 @@ io.on("connection", (socket) => {
     }
 
     socket.emit("error-message", "You must be in a room to request audio.");
+  });
+
+  socket.on("get-rooms", () => {
+    socket.emit("rooms-list", getPublicRooms());
   });
 });
 

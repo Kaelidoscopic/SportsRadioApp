@@ -1,33 +1,8 @@
-import QRScanner from "./QRScanner";
-import { useState } from "react";
-
-function LandingPage({ roomId, setRoomId, createRoom, joinRoom }) {
-  const [scannerOpen, setScannerOpen] = useState(false);
-
+function LandingPage({ roomId, setRoomId, createRoom, joinRoom, activeRooms }) {
   const handleKeyDown = (e) => {
     if (e.key === "Enter") {
       joinRoom();
     }
-  };
-
-  const handleScan = (decodedText) => {
-    try {
-      const url = new URL(decodedText);
-      const roomFromQr = url.searchParams.get("room");
-
-      if (roomFromQr) {
-        setRoomId(roomFromQr);
-        setScannerOpen(false);
-        setTimeout(() => joinRoom(roomFromQr), 0);
-        return;
-      }
-    } catch {
-      // If QR is just the raw room code
-    }
-
-    setRoomId(decodedText);
-    setScannerOpen(false);
-    setTimeout(() => joinRoom(decodedText), 0);
   };
 
   return (
@@ -39,12 +14,6 @@ function LandingPage({ roomId, setRoomId, createRoom, joinRoom }) {
         </div>
 
         <div className="compact-actions">
-          <button className="primary-button" onClick={createRoom}>
-            Start a Room
-          </button>
-
-          <div className="join-divider">or</div>
-
           <input
             className="room-input compact-input"
             type="text"
@@ -54,22 +23,33 @@ function LandingPage({ roomId, setRoomId, createRoom, joinRoom }) {
             onKeyDown={handleKeyDown}
           />
 
+          <button className="primary-button" onClick={createRoom}>
+            Start Room
+          </button>
+
           <button className="secondary-button" onClick={joinRoom}>
             Join Audio
           </button>
-
-          <button className="ghost-button" onClick={() => setScannerOpen(true)}>
-            Scan QR Code
-          </button>
         </div>
-      </div>
 
-      {scannerOpen && (
-        <QRScanner
-          onScan={handleScan}
-          onClose={() => setScannerOpen(false)}
-        />
-      )}
+        {activeRooms.length > 0 && (
+          <div className="room-directory">
+            {activeRooms.map((room) => (
+              <button
+                key={room.roomId}
+                className="room-list-card"
+                onClick={() => joinRoom(room.roomId)}
+              >
+                <span className="room-list-code">{room.roomId}</span>
+
+                <span className={`mini-pill ${room.isBroadcasting ? "live" : "offline"}`}>
+                  {room.isBroadcasting ? "ONLINE" : "OFFLINE"}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
