@@ -379,7 +379,18 @@ function App() {
         audio: true
       });
 
-      const audioTracks = stream.getAudioTracks();
+      const audioTracks = fullStream.getAudioTracks();
+
+      if (audioTracks.length === 0) {
+        setIsBroadcasting(false);
+        setIsHostLive(false);
+        socket.emit("broadcast-stopped");
+        setMessage("No audio was shared. Use Chrome/Edge and enable Share tab audio.");
+        fullStream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+
+      console.log("Audio tracks:", audioTracks);
 
       if (audioTracks.length === 0) {
         setMessage("No audio was shared. Choose a tab/window and enable Share audio.");
