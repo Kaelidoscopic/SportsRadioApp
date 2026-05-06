@@ -338,7 +338,9 @@ function App() {
   }, []);
 
   const createRoom = () => {
-    socket.emit("create-room");
+    const code = roomId.trim();
+
+    socket.emit("create-room", code || null);
   };
 
   const joinRoom = (overrideRoomId) => {

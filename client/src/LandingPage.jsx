@@ -48,9 +48,9 @@ function LandingPage({ roomId, setRoomId, createRoom, joinRoom }) {
           <input
             className="room-input compact-input"
             type="text"
-            placeholder="Enter room code"
+            placeholder="Enter or create room code"
             value={roomId}
-            onChange={(e) => setRoomId(e.target.value)}
+            onChange={(e) => setRoomId(e.target.value.toUpperCase())}
             onKeyDown={handleKeyDown}
           />
 
