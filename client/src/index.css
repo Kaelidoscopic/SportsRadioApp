@@ -470,6 +470,18 @@ button:disabled {
   margin: 0.25rem 0 0;
 }
 
+.small-note {
+  color: #7f8a9a;
+  font-size: 0.85rem;
+  text-align: center;
+  margin: 0.25rem 0 0;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 @media (max-width: 700px) {
   .page-shell {
     padding: 1rem;

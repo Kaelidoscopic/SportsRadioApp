@@ -4,6 +4,7 @@ import QRScanner from "./QRScanner";
 function LandingPage({ roomId, setRoomId, createRoom, joinRoom }) {
   const [mode, setMode] = useState(null);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const savedHostCode = localStorage.getItem("venueAudioHostCode") || "";
 
   const handleJoinKeyDown = (e) => {
     if (e.key === "Enter") {
@@ -31,6 +32,12 @@ function LandingPage({ roomId, setRoomId, createRoom, joinRoom }) {
     setTimeout(() => joinRoom(decodedText), 0);
   };
 
+  const saveHostCode = () => {
+    if (!roomId.trim()) return;
+
+    localStorage.setItem("venueAudioHostCode", roomId.trim().toUpperCase());
+  };
+
   if (mode === "host") {
     return (
       <div className="page-shell">
@@ -55,7 +62,30 @@ function LandingPage({ roomId, setRoomId, createRoom, joinRoom }) {
               onChange={(e) => setRoomId(e.target.value.toUpperCase())}
             />
 
-            <button className="primary-button" onClick={createRoom}>
+            {savedHostCode && (
+              <button
+                className="secondary-button"
+                onClick={() => setRoomId(savedHostCode)}
+              >
+                Use Saved Code: {savedHostCode}
+              </button>
+            )}
+
+            <button
+              className="ghost-button"
+              onClick={saveHostCode}
+              disabled={!roomId.trim()}
+            >
+              Save This Code
+            </button>
+
+            <button
+              className="primary-button"
+              onClick={() => {
+                saveHostCode();
+                createRoom();
+              }}
+            >
               Start Room
             </button>
 
@@ -124,7 +154,15 @@ function LandingPage({ roomId, setRoomId, createRoom, joinRoom }) {
         </div>
 
         <div className="compact-actions">
-          <button className="primary-button" onClick={() => setMode("host")}>
+          <button
+            className="primary-button"
+            onClick={() => {
+              if (!roomId && savedHostCode) {
+                setRoomId(savedHostCode);
+              }
+              setMode("host");
+            }}
+          >
             Host Audio
           </button>
 
