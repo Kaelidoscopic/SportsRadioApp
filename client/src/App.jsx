@@ -6,25 +6,26 @@ import ListenerDashboard from "./ListenerDashboard";
 
 const socket = io(import.meta.env.VITE_BACKEND_URL);
 
+const rtcConfig = {
+  iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+};
+
 function App() {
   const [roomId, setRoomId] = useState("");
   const [currentRoom, setCurrentRoom] = useState("");
   const [role, setRole] = useState("");
   const [members, setMembers] = useState([]);
   const [message, setMessage] = useState("Welcome.");
-  const [isBroadcasting, setIsBroadcasting] = useState(false);  const [isListening, setIsListening] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
 
-  const localStreamRef = useRef(null);
-  const remoteAudioRef = useRef(null);
-  const roleRef = useRef("");
-  const listenerPeerRef = useRef(null);
-  const hostPeerConnectionsRef = useRef({});
+  const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [isHostLive, setIsHostLive] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   const [userPausedListening, setUserPausedListening] = useState(false);
-  const [activeRooms, setActiveRooms] = useState([]);
 
+  const [activeRooms, setActiveRooms] = useState([]);
   const [audioInputs, setAudioInputs] = useState([]);
+
   const [broadcastSourceType, setBroadcastSourceType] = useState(
     localStorage.getItem("venueAudioSourceType") || "input"
   );
@@ -33,44 +34,15 @@ function App() {
     localStorage.getItem("venueAudioInputId") || ""
   );
 
-  const rtcConfig = {
-    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-  };
+  const localStreamRef = useRef(null);
+  const remoteAudioRef = useRef(null);
+  const roleRef = useRef("");
+  const listenerPeerRef = useRef(null);
+  const hostPeerConnectionsRef = useRef({});
 
   useEffect(() => {
     roleRef.current = role;
   }, [role]);
-
-  useEffect(() => {
-    loadAudioInputs();
-  }, []);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const roomFromUrl = params.get("room");
-
-    if (roomFromUrl) {
-      const cleanRoomCode = roomFromUrl.trim();
-
-      setRoomId(cleanRoomCode);
-      setMessage(`Joining room ${cleanRoomCode}...`);
-
-      setTimeout(() => {
-        joinRoom(cleanRoomCode);
-      }, 300);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (
-      role === "listener" &&
-      isHostLive &&
-      !isListening &&
-      !userPausedListening
-    ) {
-      startListening();
-    }
-  }, [isHostLive, role, isListening, userPausedListening]);
 
   useEffect(() => {
     localStorage.setItem("venueAudioSourceType", broadcastSourceType);
@@ -82,11 +54,46 @@ function App() {
     }
   }, [selectedAudioInput]);
 
+  const loadAudioInputs = async () => {
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioDevices = devices.filter(
+        (device) => device.kind === "audioinput"
+      );
+
+      setAudioInputs(audioDevices);
+
+      if (audioDevices.length === 0) {
+        setSelectedAudioInput("");
+        return;
+      }
+
+      const savedInputId = localStorage.getItem("venueAudioInputId");
+      const savedStillExists = audioDevices.some(
+        (device) => device.deviceId === savedInputId
+      );
+
+      setSelectedAudioInput(
+        savedInputId && savedStillExists
+          ? savedInputId
+          : audioDevices[0].deviceId
+      );
+    } catch (error) {
+      console.error("Failed to load audio devices:", error);
+    }
+  };
+
+  const refreshAudioInputs = async () => {
+    await loadAudioInputs();
+    setMessage("Audio devices refreshed.");
+  };
+
   useEffect(() => {
-    navigator.mediaDevices.addEventListener(
-      "devicechange",
-      loadAudioInputs
-    );
+    loadAudioInputs();
+
+    navigator.mediaDevices.addEventListener("devicechange", loadAudioInputs);
 
     return () => {
       navigator.mediaDevices.removeEventListener(
@@ -151,8 +158,6 @@ function App() {
         remoteAudioRef.current.srcObject = event.streams[0];
         await playRemoteAudio();
       }
-
-      setMessage("Receiving live audio.");
     };
 
     return pc;
@@ -200,7 +205,7 @@ function App() {
         existingPc.connectionState !== "closed" &&
         existingPc.signalingState !== "closed"
       ) {
-        console.log("Already have peer connection for listener:", listenerSocketId);
+        console.log("Peer connection already exists for:", listenerSocketId);
         return;
       }
 
@@ -218,51 +223,38 @@ function App() {
         target: listenerSocketId,
         offer
       });
-
-      setMessage(`Live audio sent to listener ${listenerSocketId.slice(0, 6)}.`);
     } catch (error) {
       console.error("Error creating offer:", error);
       setMessage("Failed to create live audio connection.");
     }
   };
 
-  const loadAudioInputs = async () => {
-    try {
-      await navigator.mediaDevices.getUserMedia({ audio: true });
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const roomFromUrl = params.get("room");
 
-      const devices = await navigator.mediaDevices.enumerateDevices();
+    if (roomFromUrl) {
+      const cleanRoomCode = roomFromUrl.trim();
 
-      const audioDevices = devices.filter(
-        (device) => device.kind === "audioinput"
-      );
+      setRoomId(cleanRoomCode);
+      setMessage(`Joining room ${cleanRoomCode}...`);
 
-      setAudioInputs(audioDevices);
-
-      if (audioDevices.length === 0) {
-        setSelectedAudioInput("");
-        return;
-      }
-
-      const savedInputId = localStorage.getItem("venueAudioInputId");
-
-      const savedStillExists = audioDevices.some(
-        (device) => device.deviceId === savedInputId
-      );
-
-      if (savedInputId && savedStillExists) {
-        setSelectedAudioInput(savedInputId);
-      } else {
-        setSelectedAudioInput(audioDevices[0].deviceId);
-      }
-    } catch (error) {
-      console.error("Failed to load audio devices:", error);
+      setTimeout(() => {
+        joinRoom(cleanRoomCode);
+      }, 300);
     }
-  };
+  }, []);
 
-  const refreshAudioInputs = async () => {
-    await loadAudioInputs();
-    setMessage("Audio devices refreshed.");
-  };
+  useEffect(() => {
+    if (
+      role === "listener" &&
+      isHostLive &&
+      !isListening &&
+      !userPausedListening
+    ) {
+      startListening();
+    }
+  }, [isHostLive, role, isListening, userPausedListening]);
 
   useEffect(() => {
     socket.on("room-created", (data) => {
@@ -276,9 +268,13 @@ function App() {
       setCurrentRoom(data.roomId);
       setRole(data.role);
       setMembers(data.members);
-      setMessage(`Connected to room ${data.roomId}.`);
       setIsHostLive(Boolean(data.isBroadcasting));
       setUserPausedListening(false);
+      setMessage(`Connected to room ${data.roomId}.`);
+    });
+
+    socket.on("room-updated", (data) => {
+      setMembers(data.members);
     });
 
     socket.on("broadcast-status", (data) => {
@@ -290,21 +286,16 @@ function App() {
       }
     });
 
-    socket.on("room-updated", (data) => {
-      setMembers(data.members);
-      setMessage(`Room ${data.roomId} updated.`);
-    });
-
     socket.on("room-closed", (msg) => {
       cleanupAllConnections();
       stopBroadcastTracksOnly();
       setCurrentRoom("");
       setRole("");
       setMembers([]);
-      setMessage(msg);
       setIsHostLive(false);
       setIsListening(false);
       setUserPausedListening(false);
+      setMessage(msg);
     });
 
     socket.on("left-room", (msg) => {
@@ -313,10 +304,10 @@ function App() {
       setCurrentRoom("");
       setRole("");
       setMembers([]);
-      setMessage(msg);
       setIsHostLive(false);
       setIsListening(false);
       setUserPausedListening(false);
+      setMessage(msg);
     });
 
     socket.on("error-message", (msg) => {
@@ -368,10 +359,8 @@ function App() {
         if (!pc) return;
 
         await pc.setRemoteDescription(new RTCSessionDescription(answer));
-        setMessage("Broadcast connection established.");
       } catch (error) {
         console.error("Error handling answer:", error);
-        setMessage("Failed to finalize broadcast connection.");
       }
     });
 
@@ -381,15 +370,13 @@ function App() {
 
         if (roleRef.current === "host") {
           const pc = hostPeerConnectionsRef.current[sender];
-          if (!pc) return;
-
-          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          if (pc) {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          }
           return;
         }
 
-        if (roleRef.current === "listener") {
-          if (!listenerPeerRef.current) return;
-
+        if (roleRef.current === "listener" && listenerPeerRef.current) {
           await listenerPeerRef.current.addIceCandidate(
             new RTCIceCandidate(candidate)
           );
@@ -409,6 +396,7 @@ function App() {
       socket.off("room-created");
       socket.off("joined-room");
       socket.off("room-updated");
+      socket.off("broadcast-status");
       socket.off("room-closed");
       socket.off("left-room");
       socket.off("error-message");
@@ -416,7 +404,6 @@ function App() {
       socket.off("webrtc-offer");
       socket.off("webrtc-answer");
       socket.off("webrtc-ice-candidate");
-      socket.off("broadcast-status");
       socket.off("rooms-list");
     };
   }, []);
@@ -462,13 +449,14 @@ function App() {
         const audioTracks = displayStream.getAudioTracks();
 
         if (audioTracks.length === 0) {
-          setMessage("No tab/screen audio was shared. Enable audio sharing when prompted.");
+          setMessage(
+            "No tab or screen audio was shared. Enable audio sharing when prompted."
+          );
           displayStream.getTracks().forEach((track) => track.stop());
           return;
         }
 
         stream = new MediaStream(audioTracks);
-
         displayStream.getVideoTracks().forEach((track) => track.stop());
       } else {
         stream = await navigator.mediaDevices.getUserMedia({
@@ -486,7 +474,7 @@ function App() {
       const audioTracks = stream.getAudioTracks();
 
       if (audioTracks.length === 0) {
-        setMessage("No audio input detected.");
+        setMessage("No audio source detected.");
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
@@ -566,19 +554,19 @@ function App() {
   };
 
   const stopListening = () => {
-      if (roleRef.current !== "listener") return;
+    if (roleRef.current !== "listener") return;
 
-      setUserPausedListening(true);
+    setUserPausedListening(true);
 
-      if (remoteAudioRef.current) {
-        remoteAudioRef.current.pause();
-      }
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.pause();
+    }
 
-      setIsListening(false);
-      setMessage("Listening paused.");
-    };
+    setIsListening(false);
+    setMessage("Listening paused.");
+  };
 
-    const reconnectAudio = () => {
+  const reconnectAudio = () => {
     if (roleRef.current !== "listener") return;
 
     cleanupListenerConnection();

@@ -8,7 +8,7 @@ function HostDashboard({
   startBroadcasting,
   stopBroadcasting,
   toggleMute,
-  audioInputs,
+  audioInputs = [],
   selectedAudioInput,
   setSelectedAudioInput,
   broadcastSourceType,
@@ -19,13 +19,19 @@ function HostDashboard({
     ? `${import.meta.env.VITE_FRONTEND_URL}/?room=${currentRoom}`
     : "";
 
-  const toggleBroadcast = () => {
+  const handleBroadcastToggle = () => {
     if (isBroadcasting) {
       stopBroadcasting();
     } else {
       startBroadcasting();
     }
   };
+
+  const statusText = isBroadcasting
+    ? isMuted
+      ? "MUTED"
+      : "LIVE"
+    : "OFFLINE";
 
   return (
     <div className="page-shell">
@@ -34,7 +40,7 @@ function HostDashboard({
           <div className="room-code-value">{currentRoom || "------"}</div>
 
           <div className={`live-pill ${isBroadcasting ? "live" : "offline"}`}>
-            {isBroadcasting ? (isMuted ? "MUTED" : "LIVE") : "OFFLINE"}
+            {statusText}
           </div>
         </div>
 
@@ -64,33 +70,22 @@ function HostDashboard({
           </select>
 
           {broadcastSourceType === "input" && (
-            <select
-              className="audio-select"
-              value={selectedAudioInput}
-              onChange={(e) => setSelectedAudioInput(e.target.value)}
-              disabled={isBroadcasting}
-            >
-              {audioInputs.map((device) => (
-                <option key={device.deviceId} value={device.deviceId}>
-                  {device.label || "Audio Input"}
-                </option>
-              ))}
-            </select>
-          )}
-
-          {broadcastSourceType === "input" && (
             <>
               <select
                 className="audio-select"
                 value={selectedAudioInput}
                 onChange={(e) => setSelectedAudioInput(e.target.value)}
-                disabled={isBroadcasting}
+                disabled={isBroadcasting || audioInputs.length === 0}
               >
-                {audioInputs.map((device) => (
-                  <option key={device.deviceId} value={device.deviceId}>
-                    {device.label || "Audio Input"}
-                  </option>
-                ))}
+                {audioInputs.length === 0 ? (
+                  <option value="">No audio inputs found</option>
+                ) : (
+                  audioInputs.map((device, index) => (
+                    <option key={device.deviceId} value={device.deviceId}>
+                      {device.label || `Audio Input ${index + 1}`}
+                    </option>
+                  ))
+                )}
               </select>
 
               <button
@@ -109,7 +104,7 @@ function HostDashboard({
             </>
           )}
 
-          <button className="primary-button" onClick={toggleBroadcast}>
+          <button className="primary-button" onClick={handleBroadcastToggle}>
             {isBroadcasting ? "Stop Broadcasting" : "Choose Audio Source"}
           </button>
 

@@ -1,10 +1,52 @@
-import QRScanner from "./QRScanner";
 import { useEffect, useState } from "react";
+import QRScanner from "./QRScanner";
 
-function LandingPage({ roomId, setRoomId, createRoom, joinRoom }) {
+function LandingPage({
+  roomId,
+  setRoomId,
+  createRoom,
+  joinRoom,
+  activeRooms = []
+}) {
   const [mode, setMode] = useState(null);
   const [scannerOpen, setScannerOpen] = useState(false);
+
   const savedHostCode = localStorage.getItem("venueAudioHostCode") || "";
+
+  useEffect(() => {
+    const isHostDevice = localStorage.getItem("venueAudioHostMode") === "true";
+
+    if (isHostDevice && savedHostCode) {
+      setRoomId(savedHostCode);
+      setMode("host");
+    }
+  }, [savedHostCode, setRoomId]);
+
+  const saveHostCode = () => {
+    const cleanCode = roomId.trim().toUpperCase();
+    if (!cleanCode) return;
+
+    localStorage.setItem("venueAudioHostCode", cleanCode);
+    setRoomId(cleanCode);
+  };
+
+  const resetSavedHost = () => {
+    localStorage.removeItem("venueAudioHostMode");
+    localStorage.removeItem("venueAudioHostCode");
+    localStorage.removeItem("venueAudioSourceType");
+    localStorage.removeItem("venueAudioInputId");
+    setRoomId("");
+  };
+
+  const handleCreateRoom = () => {
+    saveHostCode();
+    createRoom();
+  };
+
+  const handleSaveAsHostDevice = () => {
+    saveHostCode();
+    localStorage.setItem("venueAudioHostMode", "true");
+  };
 
   const handleJoinKeyDown = (e) => {
     if (e.key === "Enter") {
@@ -13,40 +55,24 @@ function LandingPage({ roomId, setRoomId, createRoom, joinRoom }) {
   };
 
   const handleScan = (decodedText) => {
+    let scannedRoomCode = decodedText;
+
     try {
       const url = new URL(decodedText);
-      const roomFromQr = url.searchParams.get("room");
-
-      if (roomFromQr) {
-        setRoomId(roomFromQr.toUpperCase());
-        setScannerOpen(false);
-        setTimeout(() => joinRoom(roomFromQr), 0);
-        return;
-      }
+      scannedRoomCode = url.searchParams.get("room") || decodedText;
     } catch {
-      // QR may just be a plain room code
+      scannedRoomCode = decodedText;
     }
 
-    setRoomId(decodedText.toUpperCase());
+    const cleanRoomCode = scannedRoomCode.trim().toUpperCase();
+
+    setRoomId(cleanRoomCode);
     setScannerOpen(false);
-    setTimeout(() => joinRoom(decodedText), 0);
+
+    setTimeout(() => {
+      joinRoom(cleanRoomCode);
+    }, 0);
   };
-
-  const saveHostCode = () => {
-    if (!roomId.trim()) return;
-
-    localStorage.setItem("venueAudioHostCode", roomId.trim().toUpperCase());
-  };
-
-  useEffect(() => {
-    const isHostDevice = localStorage.getItem("venueAudioHostMode") === "true";
-    const savedCode = localStorage.getItem("venueAudioHostCode");
-
-    if (isHostDevice && savedCode) {
-      setRoomId(savedCode);
-      setMode("host");
-    }
-  }, []);
 
   if (mode === "host") {
     return (
@@ -59,7 +85,7 @@ function LandingPage({ roomId, setRoomId, createRoom, joinRoom }) {
           <div className="brand-block centered-brand">
             <h1 className="app-title">Host Audio</h1>
             <p className="app-subtitle">
-              Create a room for people nearby to join.
+              Create a room for nearby listeners.
             </p>
           </div>
 
@@ -71,10 +97,6 @@ function LandingPage({ roomId, setRoomId, createRoom, joinRoom }) {
               value={roomId}
               onChange={(e) => setRoomId(e.target.value.toUpperCase())}
             />
-
-            <p className="small-note">
-              Leave the code blank to generate a random one.
-            </p>
 
             {savedHostCode && (
               <button
@@ -93,43 +115,25 @@ function LandingPage({ roomId, setRoomId, createRoom, joinRoom }) {
               Save This Code
             </button>
 
-            <button
-              className="primary-button"
-              onClick={() => {
-                saveHostCode();
-                createRoom();
-              }}
-            >
+            <button className="primary-button" onClick={handleCreateRoom}>
               Start Room
             </button>
 
             <button
               className="secondary-button"
-              onClick={() => {
-                saveHostCode();
-                localStorage.setItem("venueAudioHostMode", "true");
-                createRoom();
-              }}
+              onClick={handleSaveAsHostDevice}
+              disabled={!roomId.trim()}
             >
               Save as Host Device
             </button>
 
-            <p className="small-note">
-              Saved host devices reopen this host screen with the room code filled in.
-            </p>
-
-            <button
-              className="ghost-button"
-              onClick={() => {
-                localStorage.removeItem("venueAudioHostMode");
-                localStorage.removeItem("venueAudioHostCode");
-                localStorage.removeItem("venueAudioSourceType");
-                localStorage.removeItem("venueAudioInputId");
-                setRoomId("");
-              }}
-            >
+            <button className="ghost-button" onClick={resetSavedHost}>
               Reset Saved Host
             </button>
+
+            <p className="small-note">
+              Leave the code blank to generate a random one.
+            </p>
           </div>
         </div>
       </div>
@@ -147,7 +151,7 @@ function LandingPage({ roomId, setRoomId, createRoom, joinRoom }) {
           <div className="brand-block centered-brand">
             <h1 className="app-title">Join Audio</h1>
             <p className="app-subtitle">
-              Enter a room code or scan a QR code.
+              Enter a code or scan a QR code.
             </p>
           </div>
 
@@ -165,10 +169,35 @@ function LandingPage({ roomId, setRoomId, createRoom, joinRoom }) {
               Join Audio
             </button>
 
-            <button className="secondary-button" onClick={() => setScannerOpen(true)}>
+            <button
+              className="secondary-button"
+              onClick={() => setScannerOpen(true)}
+            >
               Scan QR Code
             </button>
           </div>
+
+          {activeRooms.length > 0 && (
+            <div className="room-directory">
+              {activeRooms.map((room) => (
+                <button
+                  key={room.roomId}
+                  className="room-list-card"
+                  onClick={() => joinRoom(room.roomId)}
+                >
+                  <span className="room-list-code">{room.roomId}</span>
+
+                  <span
+                    className={`mini-pill ${
+                      room.isBroadcasting ? "live" : "offline"
+                    }`}
+                  >
+                    {room.isBroadcasting ? "ONLINE" : "OFFLINE"}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {scannerOpen && (
@@ -204,7 +233,10 @@ function LandingPage({ roomId, setRoomId, createRoom, joinRoom }) {
             Host Audio
           </button>
 
-          <button className="secondary-button" onClick={() => setMode("listener")}>
+          <button
+            className="secondary-button"
+            onClick={() => setMode("listener")}
+          >
             Join Audio
           </button>
         </div>
