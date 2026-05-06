@@ -5,7 +5,6 @@ function LandingPage({ roomId, setRoomId, createRoom, joinRoom }) {
   const [mode, setMode] = useState(null);
   const [scannerOpen, setScannerOpen] = useState(false);
   const savedHostCode = localStorage.getItem("venueAudioHostCode") || "";
-  const [autoCreateAttempted, setAutoCreateAttempted] = useState(false);
 
   const handleJoinKeyDown = (e) => {
     if (e.key === "Enter") {
@@ -48,24 +47,6 @@ function LandingPage({ roomId, setRoomId, createRoom, joinRoom }) {
       setMode("host");
     }
   }, []);
-
-  useEffect(() => {
-    const isHostDevice = localStorage.getItem("venueAudioHostMode") === "true";
-    const savedCode = localStorage.getItem("venueAudioHostCode");
-
-    if (
-      mode === "host" &&
-      isHostDevice &&
-      savedCode &&
-      !autoCreateAttempted
-    ) {
-      setAutoCreateAttempted(true);
-
-      setTimeout(() => {
-        createRoom(savedCode);
-      }, 300);
-    }
-  }, [mode, autoCreateAttempted, createRoom]);
 
   if (mode === "host") {
     return (
@@ -134,7 +115,7 @@ function LandingPage({ roomId, setRoomId, createRoom, joinRoom }) {
             </button>
 
             <p className="small-note">
-              Saved host devices will reopen this screen and create the room automatically.
+              Saved host devices reopen this host screen with the room code filled in.
             </p>
 
             <button
