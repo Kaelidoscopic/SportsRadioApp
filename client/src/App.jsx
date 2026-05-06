@@ -459,16 +459,31 @@ function App() {
   };
 
   const stopListening = () => {
+      if (roleRef.current !== "listener") return;
+
+      setUserPausedListening(true);
+
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.pause();
+      }
+
+      setIsListening(false);
+      setMessage("Listening paused.");
+    };
+
+    const reconnectAudio = () => {
     if (roleRef.current !== "listener") return;
 
-    setUserPausedListening(true);
+    cleanupListenerConnection();
+    setUserPausedListening(false);
 
-    if (remoteAudioRef.current) {
-      remoteAudioRef.current.pause();
+    if (!isHostLive) {
+      setMessage("Host is offline.");
+      return;
     }
 
-    setIsListening(false);
-    setMessage("Listening paused.");
+    socket.emit("request-stream");
+    setMessage("Reconnecting audio...");
   };
 
   const copyRoomCode = async () => {
@@ -532,11 +547,12 @@ function App() {
     <ListenerDashboard
       currentRoom={currentRoom}
       isListening={isListening}
+      isHostLive={isHostLive}
       leaveRoom={leaveRoom}
       startListening={startListening}
       stopListening={stopListening}
+      reconnectAudio={reconnectAudio}
       remoteAudioRef={remoteAudioRef}
-      isHostLive={isHostLive} // 👈 ADD THIS
     />
   );
 }

@@ -1,11 +1,12 @@
 function ListenerDashboard({
   currentRoom,
   isListening,
+  isHostLive,
   leaveRoom,
   startListening,
   stopListening,
-  remoteAudioRef,
-  isHostLive // <-- new prop
+  reconnectAudio,
+  remoteAudioRef
 }) {
   const toggleListening = () => {
     if (isListening) {
@@ -43,6 +44,14 @@ function ListenerDashboard({
             disabled={!isHostLive && !isListening}
           >
             {isListening ? "Stop Listening" : "Start Listening"}
+          </button>
+
+          <button
+            className="secondary-button"
+            onClick={reconnectAudio}
+            disabled={!isHostLive}
+          >
+            Reconnect Audio
           </button>
 
           <button className="ghost-button" onClick={leaveRoom}>
