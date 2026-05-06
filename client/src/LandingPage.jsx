@@ -1,4 +1,3 @@
-import { useState } from "react";
 import QRScanner from "./QRScanner";
 import { useEffect, useState } from "react";
 
