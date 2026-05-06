@@ -57,6 +57,27 @@ io.on("connection", (socket) => {
     }
 
     if (rooms[roomId]) {
+      const existingRoom = rooms[roomId];
+
+      if (existingRoom.hostSocketId === null) {
+        existingRoom.hostSocketId = socket.id;
+        socket.join(roomId);
+
+        const members = [socket.id, ...existingRoom.listeners];
+
+        socket.emit("room-created", {
+          roomId,
+          role: "host",
+          members
+        });
+
+        io.to(roomId).emit("room-updated", { roomId, members });
+
+        console.log(`Room recovered by host: ${roomId}`);
+        emitRoomsList();
+        return;
+      }
+
       socket.emit("error-message", "Room already exists.");
       return;
     }

@@ -22,11 +22,21 @@ function LandingPage({
     }
   }, [savedHostCode, setRoomId]);
 
-  const saveHostCode = () => {
-    const cleanCode = roomId.trim().toUpperCase();
+  const cleanRoomCode = (code) => {
+    return code.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  };
+
+  const usePreviousCode = () => {
+    if (!savedHostCode) return;
+    setRoomId(savedHostCode);
+  };
+
+  const saveHostDevice = () => {
+    const cleanCode = cleanRoomCode(roomId);
     if (!cleanCode) return;
 
     localStorage.setItem("venueAudioHostCode", cleanCode);
+    localStorage.setItem("venueAudioHostMode", "true");
     setRoomId(cleanCode);
   };
 
@@ -39,13 +49,13 @@ function LandingPage({
   };
 
   const handleCreateRoom = () => {
-    saveHostCode();
-    createRoom();
+    const cleanCode = cleanRoomCode(roomId);
+    setRoomId(cleanCode);
+    createRoom(cleanCode);
   };
 
   const handleSaveAsHostDevice = () => {
-    saveHostCode();
-    localStorage.setItem("venueAudioHostMode", "true");
+    saveHostDevice();
   };
 
   const handleJoinKeyDown = (e) => {
@@ -64,13 +74,13 @@ function LandingPage({
       scannedRoomCode = decodedText;
     }
 
-    const cleanRoomCode = scannedRoomCode.trim().toUpperCase();
+    const cleanCode = cleanRoomCode(scannedRoomCode);
 
-    setRoomId(cleanRoomCode);
+    setRoomId(cleanCode);
     setScannerOpen(false);
 
     setTimeout(() => {
-      joinRoom(cleanRoomCode);
+      joinRoom(cleanCode);
     }, 0);
   };
 
@@ -85,7 +95,7 @@ function LandingPage({
           <div className="brand-block centered-brand">
             <h1 className="app-title">Host Audio</h1>
             <p className="app-subtitle">
-              Create a room for nearby listeners.
+              Create or recover a room for nearby listeners.
             </p>
           </div>
 
@@ -95,25 +105,14 @@ function LandingPage({
               type="text"
               placeholder="Optional room code"
               value={roomId}
-              onChange={(e) => setRoomId(e.target.value.toUpperCase())}
+              onChange={(e) => setRoomId(cleanRoomCode(e.target.value))}
             />
 
             {savedHostCode && (
-              <button
-                className="secondary-button"
-                onClick={() => setRoomId(savedHostCode)}
-              >
-                Use Saved Code: {savedHostCode}
+              <button className="secondary-button" onClick={usePreviousCode}>
+                Use Previous Code: {savedHostCode}
               </button>
             )}
-
-            <button
-              className="ghost-button"
-              onClick={saveHostCode}
-              disabled={!roomId.trim()}
-            >
-              Save This Code
-            </button>
 
             <button className="primary-button" onClick={handleCreateRoom}>
               Start Room
@@ -132,7 +131,8 @@ function LandingPage({
             </button>
 
             <p className="small-note">
-              Leave the code blank to generate a random one.
+              Leave the code blank to generate a random one. Saving as a host
+              device stores this room code for future use.
             </p>
           </div>
         </div>
@@ -161,7 +161,7 @@ function LandingPage({
               type="text"
               placeholder="Enter room code"
               value={roomId}
-              onChange={(e) => setRoomId(e.target.value.toUpperCase())}
+              onChange={(e) => setRoomId(cleanRoomCode(e.target.value))}
               onKeyDown={handleJoinKeyDown}
             />
 
