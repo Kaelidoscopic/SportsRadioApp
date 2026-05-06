@@ -39,6 +39,7 @@ function App() {
   const roleRef = useRef("");
   const listenerPeerRef = useRef(null);
   const hostPeerConnectionsRef = useRef({});
+  const autoStartedRef = useRef(false);
 
   useEffect(() => {
     roleRef.current = role;
@@ -426,6 +427,67 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const savedHostCode = getSavedHostCode();
+
+    if (!isHostDeviceMode() || !savedHostCode || role || currentRoom) {
+      return;
+    }
+
+    setRoomId(savedHostCode);
+    setBroadcastSourceType(localStorage.getItem("venueAudioSourceType") || "input");
+    setMessage(`Host device mode loaded for room ${savedHostCode}.`);
+
+    socket.emit("create-room", savedHostCode);
+  }, [role, currentRoom]);
+
+  useEffect(() => {
+    if (!isHostDeviceMode()) return;
+    if (role !== "host") return;
+    if (!currentRoom) return;
+    if (isBroadcasting) return;
+    if (autoStartedRef.current) return;
+
+    if (broadcastSourceType === "input" && !selectedAudioInput) {
+      setMessage("Host device mode loaded, but no saved audio input was found.");
+      return;
+    }
+
+    autoStartedRef.current = true;
+
+    setTimeout(() => {
+      startBroadcasting();
+    }, 500);
+  }, [role, currentRoom, isBroadcasting, selectedAudioInput, broadcastSourceType]);
+
+  const isHostDeviceMode = () => {
+    return localStorage.getItem("venueAudioHostMode") === "true";
+  };
+
+  const getSavedHostCode = () => {
+    return localStorage.getItem("venueAudioHostCode") || "";
+  };
+
+  const saveHostDeviceSettings = () => {
+    const cleanCode = roomId.trim().toUpperCase();
+
+    if (!cleanCode) {
+      setMessage("Enter a room code before saving this host device.");
+      return;
+    }
+
+    localStorage.setItem("venueAudioHostMode", "true");
+    localStorage.setItem("venueAudioHostCode", cleanCode);
+    localStorage.setItem("venueAudioSourceType", broadcastSourceType);
+
+    if (selectedAudioInput) {
+      localStorage.setItem("venueAudioInputId", selectedAudioInput);
+    }
+
+    setRoomId(cleanCode);
+    setMessage(`Saved this device as host ${cleanCode}.`);
+  };
+
   const createRoom = (overrideCode) => {
     const code =
       typeof overrideCode === "string" ? overrideCode.trim() : roomId.trim();
@@ -627,6 +689,7 @@ function App() {
         broadcastSourceType={broadcastSourceType}
         setBroadcastSourceType={setBroadcastSourceType}
         refreshAudioInputs={refreshAudioInputs}
+        saveHostDeviceSettings={saveHostDeviceSettings}
       />
     );
   }
