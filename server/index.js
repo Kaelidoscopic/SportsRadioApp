@@ -227,9 +227,31 @@ io.on("connection", (socket) => {
       const room = rooms[roomId];
 
       if (room.hostSocketId === socket.id) {
-        closeRoom(roomId, "Host disconnected. Room closed.");
-        return;
-      }
+      room.hostSocketId = null;
+      room.isBroadcasting = false;
+
+      io.to(roomId).emit("broadcast-status", {
+        isBroadcasting: false
+      });
+
+      io.to(roomId).emit(
+        "error-message",
+        "Host connection dropped. Waiting for host to reconnect..."
+      );
+
+      emitRoomsList();
+
+      setTimeout(() => {
+        const latestRoom = rooms[roomId];
+
+        if (latestRoom && latestRoom.hostSocketId === null) {
+          closeRoom(roomId, "Host did not reconnect. Room closed.");
+        }
+      }, 15000);
+
+      console.log(`Host disconnected from ${roomId}. Waiting before closing room.`);
+      return;
+    }
 
       const index = room.listeners.indexOf(socket.id);
 
@@ -245,6 +267,37 @@ io.on("connection", (socket) => {
         return;
       }
     }
+  });
+
+  socket.on("recover-host-room", (roomCode) => {
+    const roomId = sanitizeRoomCode(roomCode || "");
+    const room = rooms[roomId];
+
+    if (!room) {
+      socket.emit("error-message", "Room could not be recovered.");
+      return;
+    }
+
+    if (room.hostSocketId !== null) {
+      socket.emit("error-message", "Room already has an active host.");
+      return;
+    }
+
+    room.hostSocketId = socket.id;
+    socket.join(roomId);
+
+    const members = [room.hostSocketId, ...room.listeners];
+
+    socket.emit("room-created", {
+      roomId,
+      role: "host",
+      members
+    });
+
+    io.to(roomId).emit("room-updated", { roomId, members });
+
+    console.log(`Host recovered room ${roomId}`);
+    emitRoomsList();
   });
 });
 

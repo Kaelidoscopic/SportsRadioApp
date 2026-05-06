@@ -310,6 +310,22 @@ function App() {
       setMessage(msg);
     });
 
+    socket.on("connect", () => {
+      if (roleRef.current === "host" && currentRoom) {
+        socket.emit("recover-host-room", currentRoom);
+        setMessage("Reconnected to host room.");
+      }
+
+      if (roleRef.current === "listener" && currentRoom) {
+        socket.emit("join-room", currentRoom);
+        setMessage("Reconnected to room.");
+      }
+    });
+
+    socket.on("disconnect", () => {
+      setMessage("Connection lost. Trying to reconnect...");
+    });
+
     socket.on("error-message", (msg) => {
       setMessage(msg);
     });
@@ -405,6 +421,8 @@ function App() {
       socket.off("webrtc-answer");
       socket.off("webrtc-ice-candidate");
       socket.off("rooms-list");
+      socket.off("connect");
+      socket.off("disconnect");
     };
   }, []);
 
