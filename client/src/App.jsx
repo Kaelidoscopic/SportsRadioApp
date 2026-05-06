@@ -559,7 +559,6 @@ function App() {
     return (
       <HostDashboard
         currentRoom={currentRoom}
-        venueId={venueId}
         isBroadcasting={isBroadcasting}
         isMuted={isMuted}
         leaveRoom={leaveRoom}
