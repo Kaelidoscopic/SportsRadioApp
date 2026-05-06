@@ -2,11 +2,11 @@ import { QRCodeSVG } from "qrcode.react";
 
 function HostDashboard({
   currentRoom,
-  isMicOn,
+  isBroadcasting,
   isMuted,
   leaveRoom,
-  startMicrophone,
-  stopMicrophone,
+  startBroadcasting,
+  stopBroadcasting,
   toggleMute
 }) {
   const joinLink = currentRoom
@@ -14,10 +14,10 @@ function HostDashboard({
     : "";
 
   const toggleBroadcast = () => {
-    if (isMicOn) {
-      stopMicrophone();
+    if (isBroadcasting) {
+      stopBroadcasting();
     } else {
-      startMicrophone();
+      startBroadcasting();
     }
   };
 
@@ -27,8 +27,8 @@ function HostDashboard({
         <div className="room-code-card host-room-card">
           <div className="room-code-value">{currentRoom || "------"}</div>
 
-          <div className={`live-pill ${isMicOn ? "live" : "offline"}`}>
-            {isMicOn ? (isMuted ? "MUTED" : "LIVE") : "OFFLINE"}
+          <div className={`live-pill ${isBroadcasting ? "live" : "offline"}`}>
+            {isBroadcasting ? (isMuted ? "MUTED" : "LIVE") : "OFFLINE"}
           </div>
         </div>
 
@@ -41,11 +41,17 @@ function HostDashboard({
         )}
 
         <div className="panel-card host-controls">
+          {!isBroadcasting && (
+            <p className="host-hint">
+              Choose the tab or screen playing audio. Enable audio sharing when prompted.
+            </p>
+          )}
+
           <button className="primary-button" onClick={toggleBroadcast}>
-            {isMicOn ? "Stop Broadcasting" : "Choose Audio Source"}
+            {isBroadcasting ? "Stop Broadcasting" : "Choose Audio Source"}
           </button>
 
-          {isMicOn && (
+          {isBroadcasting && (
             <button className="secondary-button" onClick={toggleMute}>
               {isMuted ? "Unmute Broadcast" : "Mute Broadcast"}
             </button>

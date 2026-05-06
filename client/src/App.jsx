@@ -12,8 +12,7 @@ function App() {
   const [role, setRole] = useState("");
   const [members, setMembers] = useState([]);
   const [message, setMessage] = useState("Welcome.");
-  const [isMicOn, setIsMicOn] = useState(false);
-  const [isListening, setIsListening] = useState(false);
+  const [isBroadcasting, setIsBroadcasting] = useState(false);  const [isListening, setIsListening] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
 
   const localStreamRef = useRef(null);
@@ -145,13 +144,13 @@ function App() {
     cleanupListenerConnection();
   };
 
-  const stopMicrophoneTracksOnly = () => {
+  const stopBroadcastTracksOnly = () => {
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => track.stop());
       localStreamRef.current = null;
     }
 
-    setIsMicOn(false);
+    setIsBroadcasting(false);
   };
 
   const sendOfferToListener = async (listenerSocketId, streamToSend) => {
@@ -215,7 +214,7 @@ function App() {
 
     socket.on("room-closed", (msg) => {
       cleanupAllConnections();
-      stopMicrophoneTracksOnly();
+      stopBroadcastTracksOnly();
       setCurrentRoom("");
       setRole("");
       setMembers([]);
@@ -227,7 +226,7 @@ function App() {
 
     socket.on("left-room", (msg) => {
       cleanupAllConnections();
-      stopMicrophoneTracksOnly();
+      stopBroadcastTracksOnly();
       setCurrentRoom("");
       setRole("");
       setMembers([]);
@@ -350,7 +349,7 @@ function App() {
 
   const leaveRoom = () => {
     cleanupAllConnections();
-    stopMicrophoneTracksOnly();
+    stopBroadcastTracksOnly();
     socket.emit("leave-room");
     setUserPausedListening(false);
   };
@@ -374,7 +373,7 @@ function App() {
 
       localStreamRef.current = new MediaStream(audioTracks);
 
-      setIsMicOn(true);
+      setIsBroadcasting(true);
       setIsMuted(false);
       setIsHostLive(true);
       socket.emit("broadcast-started");
@@ -395,7 +394,7 @@ function App() {
       });
 
       audioTracks[0].onended = () => {
-        stopMicrophone();
+        stopBroadcasting();
       };
     } catch (error) {
       console.error("Audio source capture failed:", error);
@@ -403,10 +402,10 @@ function App() {
     }
   };
 
-  const stopMicrophone = () => {
+  const stopBroadcasting = () => {
     if (roleRef.current !== "host") return;
 
-    stopMicrophoneTracksOnly();
+    stopBroadcastTracksOnly();
     cleanupHostConnections();
 
     setIsHostLive(false);
@@ -513,11 +512,11 @@ function App() {
     return (
       <HostDashboard
         currentRoom={currentRoom}
-        isMicOn={isMicOn}
+        isBroadcasting={isBroadcasting}
         isMuted={isMuted}
         leaveRoom={leaveRoom}
-        startMicrophone={startBroadcasting}
-        stopMicrophone={stopMicrophone}
+        startBroadcasting={startBroadcasting}
+        stopBroadcasting={stopBroadcasting}
         toggleMute={toggleMute}
       />
     );

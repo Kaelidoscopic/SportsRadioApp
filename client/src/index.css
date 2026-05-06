@@ -387,6 +387,14 @@ input {
   margin-bottom: 1rem;
 }
 
+.host-hint {
+  margin: 0 0 0.75rem;
+  color: #aeb6c3;
+  text-align: center;
+  line-height: 1.4;
+  font-size: 0.95rem;
+}
+
 @media (max-width: 700px) {
   .page-shell {
     padding: 1rem;
