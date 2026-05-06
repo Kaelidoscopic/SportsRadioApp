@@ -82,6 +82,20 @@ function App() {
     }
   }, [selectedAudioInput]);
 
+  useEffect(() => {
+    navigator.mediaDevices.addEventListener(
+      "devicechange",
+      loadAudioInputs
+    );
+
+    return () => {
+      navigator.mediaDevices.removeEventListener(
+        "devicechange",
+        loadAudioInputs
+      );
+    };
+  }, []);
+
   const playRemoteAudio = async () => {
     if (!remoteAudioRef.current) return;
 
@@ -224,6 +238,11 @@ function App() {
 
       setAudioInputs(audioDevices);
 
+      if (audioDevices.length === 0) {
+        setSelectedAudioInput("");
+        return;
+      }
+
       const savedInputId = localStorage.getItem("venueAudioInputId");
 
       const savedStillExists = audioDevices.some(
@@ -232,12 +251,17 @@ function App() {
 
       if (savedInputId && savedStillExists) {
         setSelectedAudioInput(savedInputId);
-      } else if (audioDevices.length > 0) {
+      } else {
         setSelectedAudioInput(audioDevices[0].deviceId);
       }
     } catch (error) {
       console.error("Failed to load audio devices:", error);
     }
+  };
+
+  const refreshAudioInputs = async () => {
+    await loadAudioInputs();
+    setMessage("Audio devices refreshed.");
   };
 
   useEffect(() => {
@@ -596,6 +620,7 @@ function App() {
         setSelectedAudioInput={setSelectedAudioInput}
         broadcastSourceType={broadcastSourceType}
         setBroadcastSourceType={setBroadcastSourceType}
+        refreshAudioInputs={refreshAudioInputs}
       />
     );
   }

@@ -12,7 +12,8 @@ function HostDashboard({
   selectedAudioInput,
   setSelectedAudioInput,
   broadcastSourceType,
-  setBroadcastSourceType
+  setBroadcastSourceType,
+  refreshAudioInputs
 }) {
   const joinLink = currentRoom
     ? `${import.meta.env.VITE_FRONTEND_URL}/?room=${currentRoom}`
@@ -75,6 +76,37 @@ function HostDashboard({
                 </option>
               ))}
             </select>
+          )}
+
+          {broadcastSourceType === "input" && (
+            <>
+              <select
+                className="audio-select"
+                value={selectedAudioInput}
+                onChange={(e) => setSelectedAudioInput(e.target.value)}
+                disabled={isBroadcasting}
+              >
+                {audioInputs.map((device) => (
+                  <option key={device.deviceId} value={device.deviceId}>
+                    {device.label || "Audio Input"}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                className="ghost-button"
+                onClick={refreshAudioInputs}
+                disabled={isBroadcasting}
+              >
+                Refresh Audio Devices
+              </button>
+
+              {audioInputs.length === 0 && (
+                <p className="small-warning">
+                  No audio input devices detected.
+                </p>
+              )}
+            </>
           )}
 
           <button className="primary-button" onClick={toggleBroadcast}>

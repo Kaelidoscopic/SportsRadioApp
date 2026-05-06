@@ -492,6 +492,13 @@ button:disabled {
   font-size: 1rem;
 }
 
+.small-warning {
+  color: #ff9b9b;
+  font-size: 0.9rem;
+  text-align: center;
+  margin-top: 0.5rem;
+}
+
 @media (max-width: 700px) {
   .page-shell {
     padding: 1rem;
