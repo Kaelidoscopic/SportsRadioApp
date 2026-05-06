@@ -524,12 +524,25 @@ function App() {
 
   const disableHostDeviceMode = () => {
     localStorage.removeItem("venueAudioHostMode");
-    autoStartedRef.current = true;
+
+    if (autoStartedRef.current !== undefined) {
+      autoStartedRef.current = true;
+    }
+
+    cleanupAllConnections();
+    stopBroadcastTracksOnly();
+
+    if (roleRef.current === "host" && currentRoom) {
+      socket.emit("leave-room");
+    }
 
     setCurrentRoom("");
     setRole("");
     setMembers([]);
     setIsBroadcasting(false);
+    setIsHostLive(false);
+    setIsMuted(false);
+    setUserPausedListening(false);
     setMessage("Host device mode disabled.");
   };
 

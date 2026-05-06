@@ -19,18 +19,25 @@ const io = new Server(server, {
 const rooms = {};
 
 const getPublicRooms = () =>
-  Object.entries(rooms).map(([roomId, room]) => ({
-    roomId,
-    isBroadcasting: room.isBroadcasting,
-    listenerCount: room.listeners.length
-  }));
+  Object.entries(rooms)
+    .filter(([, room]) => room.hostSocketId)
+    .map(([roomId, room]) => ({
+      roomId,
+      isBroadcasting: room.isBroadcasting,
+      listenerCount: room.listeners.length
+    }));
 
 const emitRoomsList = () => {
   io.emit("rooms-list", getPublicRooms());
 };
 
 const closeRoom = (roomId, reason) => {
-  if (!rooms[roomId]) return;
+  const room = rooms[roomId];
+  if (!room) return;
+
+  if (room.hostDisconnectTimer) {
+    clearTimeout(room.hostDisconnectTimer);
+  }
 
   io.to(roomId).emit("room-closed", reason);
   delete rooms[roomId];
@@ -60,6 +67,11 @@ io.on("connection", (socket) => {
       const existingRoom = rooms[roomId];
 
       if (existingRoom.hostSocketId === null) {
+        if (existingRoom.hostDisconnectTimer) {
+          clearTimeout(existingRoom.hostDisconnectTimer);
+          existingRoom.hostDisconnectTimer = null;
+        }
+
         existingRoom.hostSocketId = socket.id;
         socket.join(roomId);
 
@@ -85,7 +97,8 @@ io.on("connection", (socket) => {
     rooms[roomId] = {
       hostSocketId: socket.id,
       listeners: [],
-      isBroadcasting: false
+      isBroadcasting: false,
+      hostDisconnectTimer: null
     };
 
     socket.join(roomId);
@@ -106,6 +119,11 @@ io.on("connection", (socket) => {
 
     if (!room) {
       socket.emit("error-message", "Room not found.");
+      return;
+    }
+
+    if (!room.hostSocketId) {
+      socket.emit("error-message", "Host is reconnecting. Try again in a moment.");
       return;
     }
 
@@ -168,6 +186,11 @@ io.on("connection", (socket) => {
       const room = rooms[roomId];
 
       if (room.listeners.includes(socket.id)) {
+        if (!room.hostSocketId) {
+          socket.emit("error-message", "Host is not connected.");
+          return;
+        }
+
         io.to(room.hostSocketId).emit("listener-joined", {
           listenerSocketId: socket.id
         });
@@ -248,31 +271,26 @@ io.on("connection", (socket) => {
       const room = rooms[roomId];
 
       if (room.hostSocketId === socket.id) {
-      room.hostSocketId = null;
-      room.isBroadcasting = false;
+        room.hostSocketId = null;
+        room.isBroadcasting = false;
 
-      io.to(roomId).emit("broadcast-status", {
-        isBroadcasting: false
-      });
+        io.to(roomId).emit("broadcast-status", {
+          isBroadcasting: false
+        });
 
-      io.to(roomId).emit(
-        "error-message",
-        "Host connection dropped. Waiting for host to reconnect..."
-      );
+        emitRoomsList();
 
-      emitRoomsList();
+        room.hostDisconnectTimer = setTimeout(() => {
+          const latestRoom = rooms[roomId];
 
-      setTimeout(() => {
-        const latestRoom = rooms[roomId];
+          if (latestRoom && latestRoom.hostSocketId === null) {
+            closeRoom(roomId, "Host disconnected. Room closed.");
+          }
+        }, 15000);
 
-        if (latestRoom && latestRoom.hostSocketId === null) {
-          closeRoom(roomId, "Host did not reconnect. Room closed.");
-        }
-      }, 15000);
-
-      console.log(`Host disconnected from ${roomId}. Waiting before closing room.`);
-      return;
-    }
+        console.log(`Host disconnected from ${roomId}. Grace period started.`);
+        return;
+      }
 
       const index = room.listeners.indexOf(socket.id);
 
