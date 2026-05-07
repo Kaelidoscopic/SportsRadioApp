@@ -40,6 +40,8 @@ function App() {
   const currentRoomRef = useRef("");
   const listenerPeerRef = useRef(null);
   const hostPeerConnectionsRef = useRef({});
+  const linkJoinRoomRef = useRef("");
+  const linkJoinRetryCountRef = useRef(0);
 
   useEffect(() => {
     roleRef.current = role;
@@ -166,6 +168,17 @@ function App() {
       }
     };
 
+    pc.onconnectionstatechange = () => {
+      if (
+        pc.connectionState === "failed" ||
+        pc.connectionState === "closed" ||
+        pc.connectionState === "disconnected"
+      ) {
+        setIsListening(false);
+        setMessage("Audio connection was interrupted.");
+      }
+    };
+
     return pc;
   };
 
@@ -215,12 +228,22 @@ function App() {
     setIsBroadcasting(false);
   };
 
-  const sendOfferToListener = async (listenerSocketId, streamToSend) => {
+  const sendOfferToListener = async (
+    listenerSocketId,
+    streamToSend,
+    forceNewConnection = false
+  ) => {
     try {
       const existingPc = hostPeerConnectionsRef.current[listenerSocketId];
 
+      if (existingPc && forceNewConnection) {
+        existingPc.close();
+        delete hostPeerConnectionsRef.current[listenerSocketId];
+      }
+
       if (
         existingPc &&
+        !forceNewConnection &&
         existingPc.connectionState !== "closed" &&
         existingPc.signalingState !== "closed"
       ) {
@@ -262,6 +285,8 @@ function App() {
     });
 
     socket.on("joined-room", (data) => {
+      linkJoinRoomRef.current = "";
+      linkJoinRetryCountRef.current = 0;
       currentRoomRef.current = data.roomId;
       roleRef.current = data.role;
       setCurrentRoom(data.roomId);
@@ -317,6 +342,26 @@ function App() {
     });
 
     socket.on("error-message", (msg) => {
+      if (msg === "Room not found." && linkJoinRoomRef.current) {
+        if (linkJoinRetryCountRef.current < 4) {
+          linkJoinRetryCountRef.current += 1;
+          setMessage("Looking for the room...");
+
+          setTimeout(() => {
+            if (linkJoinRoomRef.current) {
+              socket.emit("join-room", linkJoinRoomRef.current);
+            }
+          }, 1200);
+
+          return;
+        }
+
+        linkJoinRoomRef.current = "";
+        linkJoinRetryCountRef.current = 0;
+        setMessage("Room is not available yet. Ask the host to confirm the code.");
+        return;
+      }
+
       setMessage(msg);
     });
 
@@ -329,6 +374,17 @@ function App() {
       }
 
       await sendOfferToListener(listenerSocketId, localStreamRef.current);
+    });
+
+    socket.on("stream-requested", async ({ listenerSocketId }) => {
+      if (roleRef.current !== "host") return;
+
+      if (!localStreamRef.current) {
+        setMessage("A listener requested audio, but broadcasting has not started yet.");
+        return;
+      }
+
+      await sendOfferToListener(listenerSocketId, localStreamRef.current, true);
     });
 
     socket.on("webrtc-offer", async ({ sender, offer }) => {
@@ -407,6 +463,7 @@ function App() {
       socket.off("left-room");
       socket.off("error-message");
       socket.off("listener-joined");
+      socket.off("stream-requested");
       socket.off("webrtc-offer");
       socket.off("webrtc-answer");
       socket.off("webrtc-ice-candidate");
@@ -589,6 +646,7 @@ function App() {
 
     cleanupListenerConnection();
     setUserPausedListening(false);
+    setIsListening(false);
 
     if (!isHostLive) {
       setMessage("Host is offline.");
@@ -607,6 +665,8 @@ function App() {
       const cleanRoomCode = roomFromUrl.trim();
 
       setTimeout(() => {
+        linkJoinRoomRef.current = cleanRoomCode;
+        linkJoinRetryCountRef.current = 0;
         setRoomId(cleanRoomCode);
         setMessage(`Joining room ${cleanRoomCode}...`);
         joinRoom(cleanRoomCode);

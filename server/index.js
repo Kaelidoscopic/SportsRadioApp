@@ -219,7 +219,7 @@ io.on("connection", (socket) => {
           return;
         }
 
-        io.to(room.hostSocketId).emit("listener-joined", {
+        io.to(room.hostSocketId).emit("stream-requested", {
           listenerSocketId: socket.id
         });
 
