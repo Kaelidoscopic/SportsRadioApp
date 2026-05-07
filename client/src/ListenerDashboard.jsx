@@ -7,7 +7,8 @@ function ListenerDashboard({
   stopListening,
   reconnectAudio,
   remoteAudioRef,
-  statusMessage
+  statusMessage,
+  isSocketConnected
 }) {
   const handleListeningToggle = () => {
     if (isListening) {
@@ -31,6 +32,14 @@ function ListenerDashboard({
         <div className="panel-card listener-controls">
           {statusMessage && <div className="status-banner">{statusMessage}</div>}
 
+          <div
+            className={`connection-pill ${
+              isSocketConnected ? "live" : "offline"
+            }`}
+          >
+            {isSocketConnected ? "Server connected" : "Server disconnected"}
+          </div>
+
           <div className={`live-pill ${isListening ? "live" : "offline"}`}>
             {isListening ? "LIVE" : "PAUSED"}
           </div>
@@ -38,7 +47,7 @@ function ListenerDashboard({
           <button
             className="primary-button"
             onClick={handleListeningToggle}
-            disabled={!isHostLive && !isListening}
+            disabled={(!isHostLive || !isSocketConnected) && !isListening}
           >
             {isListening ? "Stop Listening" : "Start Listening"}
           </button>
@@ -46,7 +55,7 @@ function ListenerDashboard({
           <button
             className="secondary-button"
             onClick={reconnectAudio}
-            disabled={!isHostLive}
+            disabled={!isHostLive || !isSocketConnected}
           >
             Reconnect Audio
           </button>

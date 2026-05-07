@@ -123,7 +123,7 @@ select:disabled {
 
 .status-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.85rem;
   margin-bottom: 1rem;
 }
@@ -229,11 +229,20 @@ select:disabled {
   color: #f3f4f6;
 }
 
+.connection-pill,
 .live-pill,
 .mini-pill {
   border-radius: 999px;
   font-weight: 700;
   white-space: nowrap;
+}
+
+.connection-pill {
+  display: inline-flex;
+  justify-content: center;
+  margin: 0 auto 1rem;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.8rem;
 }
 
 .live-pill {

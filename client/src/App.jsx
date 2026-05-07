@@ -4,7 +4,24 @@ import LandingPage from "./LandingPage";
 import HostDashboard from "./HostDashboard";
 import ListenerDashboard from "./ListenerDashboard";
 
-const socket = io(import.meta.env.VITE_BACKEND_URL);
+const getSocketUrl = () => {
+  if (import.meta.env.VITE_BACKEND_URL) {
+    return import.meta.env.VITE_BACKEND_URL;
+  }
+
+  if (import.meta.env.DEV) {
+    return "http://localhost:5000";
+  }
+
+  return undefined;
+};
+
+const socket = io(getSocketUrl(), {
+  autoConnect: true,
+  reconnectionAttempts: Infinity,
+  reconnectionDelay: 500,
+  reconnectionDelayMax: 3000
+});
 
 const rtcConfig = {
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
@@ -22,6 +39,7 @@ function App() {
   const [isMuted, setIsMuted] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [userPausedListening, setUserPausedListening] = useState(false);
+  const [isSocketConnected, setIsSocketConnected] = useState(socket.connected);
 
   const [activeRooms, setActiveRooms] = useState([]);
   const [audioInputs, setAudioInputs] = useState([]);
@@ -331,6 +349,8 @@ function App() {
     });
 
     socket.on("connect", () => {
+      setIsSocketConnected(true);
+
       if (roleRef.current === "host" && currentRoomRef.current) {
         socket.emit("recover-host-room", currentRoomRef.current);
         setMessage("Reconnected to host room.");
@@ -343,7 +363,13 @@ function App() {
     });
 
     socket.on("disconnect", () => {
+      setIsSocketConnected(false);
       setMessage("Connection lost. Trying to reconnect...");
+    });
+
+    socket.on("connect_error", () => {
+      setIsSocketConnected(false);
+      setMessage("Could not reach the audio server.");
     });
 
     socket.on("error-message", (msg) => {
@@ -475,10 +501,16 @@ function App() {
       socket.off("rooms-list");
       socket.off("connect");
       socket.off("disconnect");
+      socket.off("connect_error");
     };
   }, []);
 
   const createRoom = (overrideCode) => {
+    if (!isSocketConnected) {
+      setMessage("Audio server is disconnected.");
+      return;
+    }
+
     const code =
       typeof overrideCode === "string" ? overrideCode.trim() : roomId.trim();
 
@@ -486,6 +518,11 @@ function App() {
   };
 
   const joinRoom = (overrideRoomId) => {
+    if (!isSocketConnected) {
+      setMessage("Audio server is disconnected.");
+      return;
+    }
+
     const codeToJoin =
       typeof overrideRoomId === "string" ? overrideRoomId : roomId;
 
@@ -516,6 +553,11 @@ function App() {
 
   const startBroadcasting = async () => {
     if (roleRef.current !== "host") return;
+
+    if (!isSocketConnected) {
+      setMessage("Audio server is disconnected.");
+      return;
+    }
 
     try {
       let stream;
@@ -617,6 +659,11 @@ function App() {
   const startListening = async () => {
     if (roleRef.current !== "listener") return;
 
+    if (!isSocketConnected) {
+      setMessage("Audio server is disconnected.");
+      return;
+    }
+
     if (!isHostLive) {
       setIsListening(false);
       setMessage("Host is offline.");
@@ -661,6 +708,11 @@ function App() {
 
   const reconnectAudio = () => {
     if (roleRef.current !== "listener") return;
+
+    if (!isSocketConnected) {
+      setMessage("Audio server is disconnected.");
+      return;
+    }
 
     cleanupListenerConnection();
     setUserPausedListening(false);
@@ -712,6 +764,7 @@ function App() {
         joinRoom={joinRoom}
         activeRooms={activeRooms}
         statusMessage={message}
+        isSocketConnected={isSocketConnected}
       />
     );
   }
@@ -734,6 +787,7 @@ function App() {
         refreshAudioInputs={refreshAudioInputs}
         listenerCount={Math.max(members.length - 1, 0)}
         statusMessage={message}
+        isSocketConnected={isSocketConnected}
       />
     );
   }
@@ -749,6 +803,7 @@ function App() {
       reconnectAudio={reconnectAudio}
       remoteAudioRef={remoteAudioRef}
       statusMessage={message}
+      isSocketConnected={isSocketConnected}
     />
   );
 }

@@ -7,7 +7,8 @@ function LandingPage({
   createRoom,
   joinRoom,
   activeRooms = [],
-  statusMessage
+  statusMessage,
+  isSocketConnected
 }) {
   const [mode, setMode] = useState(null);
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -82,9 +83,17 @@ function LandingPage({
             </p>
           </div>
 
-          {statusMessage && (
-            <div className="status-banner">{statusMessage}</div>
-          )}
+            {statusMessage && (
+              <div className="status-banner">{statusMessage}</div>
+            )}
+
+          <div
+            className={`connection-pill ${
+              isSocketConnected ? "live" : "offline"
+            }`}
+          >
+            {isSocketConnected ? "Server connected" : "Server disconnected"}
+          </div>
 
           <div className="compact-actions">
             <input
@@ -101,7 +110,11 @@ function LandingPage({
               </button>
             )}
 
-            <button className="primary-button" onClick={handleCreateRoom}>
+            <button
+              className="primary-button"
+              onClick={handleCreateRoom}
+              disabled={!isSocketConnected}
+            >
               Start Room
             </button>
 
@@ -136,6 +149,14 @@ function LandingPage({
             <div className="status-banner">{statusMessage}</div>
           )}
 
+          <div
+            className={`connection-pill ${
+              isSocketConnected ? "live" : "offline"
+            }`}
+          >
+            {isSocketConnected ? "Server connected" : "Server disconnected"}
+          </div>
+
           <div className="compact-actions">
             <input
               className="room-input compact-input"
@@ -146,7 +167,11 @@ function LandingPage({
               onKeyDown={handleJoinKeyDown}
             />
 
-            <button className="primary-button" onClick={handleJoinRoom}>
+            <button
+              className="primary-button"
+              onClick={handleJoinRoom}
+              disabled={!isSocketConnected}
+            >
               Join Audio
             </button>
 
@@ -200,6 +225,14 @@ function LandingPage({
         </div>
 
         {statusMessage && <div className="status-banner">{statusMessage}</div>}
+
+        <div
+          className={`connection-pill ${
+            isSocketConnected ? "live" : "offline"
+          }`}
+        >
+          {isSocketConnected ? "Server connected" : "Server disconnected"}
+        </div>
 
         <div className="compact-actions">
           <button

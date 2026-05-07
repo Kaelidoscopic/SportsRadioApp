@@ -15,7 +15,8 @@ function HostDashboard({
   setBroadcastSourceType,
   refreshAudioInputs,
   listenerCount,
-  statusMessage
+  statusMessage,
+  isSocketConnected
 }) {
   const frontendUrl =
     import.meta.env.VITE_FRONTEND_URL || window.location.origin;
@@ -66,7 +67,16 @@ function HostDashboard({
 
           <div className="metric-card">
             <span className="metric-label">Room</span>
-            <span className="metric-value">{currentRoom ? "Open" : "Closed"}</span>
+            <span className="metric-value">
+              {currentRoom ? "Open" : "Closed"}
+            </span>
+          </div>
+
+          <div className="metric-card">
+            <span className="metric-label">Server</span>
+            <span className="metric-value">
+              {isSocketConnected ? "Connected" : "Offline"}
+            </span>
           </div>
         </div>
 
@@ -144,7 +154,11 @@ function HostDashboard({
             </>
           )}
 
-          <button className="primary-button" onClick={handleBroadcastToggle}>
+          <button
+            className="primary-button"
+            onClick={handleBroadcastToggle}
+            disabled={!isSocketConnected && !isBroadcasting}
+          >
             {isBroadcasting ? "Stop Broadcasting" : "Choose Audio Source"}
           </button>
 
