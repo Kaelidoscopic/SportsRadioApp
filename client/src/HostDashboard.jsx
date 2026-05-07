@@ -13,10 +13,14 @@ function HostDashboard({
   setSelectedAudioInput,
   broadcastSourceType,
   setBroadcastSourceType,
-  refreshAudioInputs
+  refreshAudioInputs,
+  listenerCount,
+  statusMessage
 }) {
+  const frontendUrl =
+    import.meta.env.VITE_FRONTEND_URL || window.location.origin;
   const joinLink = currentRoom
-    ? `${import.meta.env.VITE_FRONTEND_URL}/?room=${currentRoom}`
+    ? `${frontendUrl}/?room=${currentRoom}`
     : "";
 
   const handleBroadcastToggle = () => {
@@ -33,6 +37,16 @@ function HostDashboard({
       : "LIVE"
     : "OFFLINE";
 
+  const copyRoomCode = async () => {
+    if (!currentRoom) return;
+    await navigator.clipboard.writeText(currentRoom);
+  };
+
+  const copyJoinLink = async () => {
+    if (!joinLink) return;
+    await navigator.clipboard.writeText(joinLink);
+  };
+
   return (
     <div className="page-shell">
       <div className="main-card dashboard-card host-card">
@@ -44,11 +58,37 @@ function HostDashboard({
           </div>
         </div>
 
+        <div className="status-grid">
+          <div className="metric-card">
+            <span className="metric-label">Listeners</span>
+            <span className="metric-value">{listenerCount}</span>
+          </div>
+
+          <div className="metric-card">
+            <span className="metric-label">Room</span>
+            <span className="metric-value">{currentRoom ? "Open" : "Closed"}</span>
+          </div>
+        </div>
+
+        {statusMessage && <div className="status-banner">{statusMessage}</div>}
+
         {currentRoom && (
           <div className="qr-card">
             <div className="qr-box">
               <QRCodeSVG value={joinLink} size={180} />
             </div>
+          </div>
+        )}
+
+        {currentRoom && (
+          <div className="share-actions">
+            <button className="secondary-button" onClick={copyRoomCode}>
+              Copy Room Code
+            </button>
+
+            <button className="secondary-button" onClick={copyJoinLink}>
+              Copy Join Link
+            </button>
           </div>
         )}
 

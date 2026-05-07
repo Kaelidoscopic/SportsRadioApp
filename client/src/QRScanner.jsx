@@ -99,7 +99,7 @@ function QRScanner({ onScan, onClose }) {
   return (
     <div className="scanner-overlay" role="dialog" aria-modal="true">
       <div className="scanner-card">
-        <div id={scannerElementId} />
+        <div id={scannerElementId} className="qr-reader" />
 
         {scannerError && <p className="small-warning">{scannerError}</p>}
 

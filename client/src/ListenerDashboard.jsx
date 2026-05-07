@@ -6,7 +6,8 @@ function ListenerDashboard({
   startListening,
   stopListening,
   reconnectAudio,
-  remoteAudioRef
+  remoteAudioRef,
+  statusMessage
 }) {
   const handleListeningToggle = () => {
     if (isListening) {
@@ -28,6 +29,8 @@ function ListenerDashboard({
         </div>
 
         <div className="panel-card listener-controls">
+          {statusMessage && <div className="status-banner">{statusMessage}</div>}
+
           <div className={`live-pill ${isListening ? "live" : "offline"}`}>
             {isListening ? "LIVE" : "PAUSED"}
           </div>

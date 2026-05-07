@@ -6,7 +6,8 @@ function LandingPage({
   setRoomId,
   createRoom,
   joinRoom,
-  activeRooms = []
+  activeRooms = [],
+  statusMessage
 }) {
   const [mode, setMode] = useState(null);
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -81,6 +82,10 @@ function LandingPage({
             </p>
           </div>
 
+          {statusMessage && (
+            <div className="status-banner">{statusMessage}</div>
+          )}
+
           <div className="compact-actions">
             <input
               className="room-input compact-input"
@@ -126,6 +131,10 @@ function LandingPage({
             <h1 className="app-title">Join Audio</h1>
             <p className="app-subtitle">Enter a code or scan a QR code.</p>
           </div>
+
+          {statusMessage && (
+            <div className="status-banner">{statusMessage}</div>
+          )}
 
           <div className="compact-actions">
             <input
@@ -189,6 +198,8 @@ function LandingPage({
           <h1 className="app-title">Venue Audio</h1>
           <p className="app-subtitle">Hear live audio from a nearby screen.</p>
         </div>
+
+        {statusMessage && <div className="status-banner">{statusMessage}</div>}
 
         <div className="compact-actions">
           <button

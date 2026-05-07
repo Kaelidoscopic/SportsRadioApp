@@ -15,7 +15,7 @@ function App() {
   const [currentRoom, setCurrentRoom] = useState("");
   const [role, setRole] = useState("");
   const [members, setMembers] = useState([]);
-  const [, setMessage] = useState("Welcome.");
+  const [message, setMessage] = useState("Welcome.");
 
   const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [isHostLive, setIsHostLive] = useState(false);
@@ -633,6 +633,7 @@ function App() {
         createRoom={createRoom}
         joinRoom={joinRoom}
         activeRooms={activeRooms}
+        statusMessage={message}
       />
     );
   }
@@ -653,6 +654,8 @@ function App() {
         broadcastSourceType={broadcastSourceType}
         setBroadcastSourceType={setBroadcastSourceType}
         refreshAudioInputs={refreshAudioInputs}
+        listenerCount={Math.max(members.length - 1, 0)}
+        statusMessage={message}
       />
     );
   }
@@ -667,6 +670,7 @@ function App() {
       stopListening={stopListening}
       reconnectAudio={reconnectAudio}
       remoteAudioRef={remoteAudioRef}
+      statusMessage={message}
     />
   );
 }
