@@ -142,7 +142,9 @@ function App() {
         pc.connectionState === "closed" ||
         pc.connectionState === "disconnected"
       ) {
-        delete hostPeerConnectionsRef.current[listenerSocketId];
+        if (hostPeerConnectionsRef.current[listenerSocketId] === pc) {
+          delete hostPeerConnectionsRef.current[listenerSocketId];
+        }
       }
     };
 
@@ -174,8 +176,10 @@ function App() {
         pc.connectionState === "closed" ||
         pc.connectionState === "disconnected"
       ) {
-        setIsListening(false);
-        setMessage("Audio connection was interrupted.");
+        if (listenerPeerRef.current === pc) {
+          setIsListening(false);
+          setMessage("Audio connection was interrupted.");
+        }
       }
     };
 
@@ -189,8 +193,9 @@ function App() {
 
   const cleanupListenerConnection = () => {
     if (listenerPeerRef.current) {
-      listenerPeerRef.current.close();
+      const pc = listenerPeerRef.current;
       listenerPeerRef.current = null;
+      pc.close();
     }
 
     if (remoteAudioRef.current) {
@@ -620,9 +625,22 @@ function App() {
 
     setUserPausedListening(false);
 
-    if (remoteAudioRef.current && remoteAudioRef.current.srcObject) {
+    const listenerConnectionState = listenerPeerRef.current?.connectionState;
+    const hasActiveRemoteStream =
+      remoteAudioRef.current?.srcObject instanceof MediaStream &&
+      remoteAudioRef.current.srcObject.active &&
+      remoteAudioRef.current.srcObject
+        .getAudioTracks()
+        .some((track) => track.readyState === "live");
+    const canResumeExistingAudio =
+      hasActiveRemoteStream &&
+      (listenerConnectionState === "connected" ||
+        listenerConnectionState === "completed");
+
+    if (canResumeExistingAudio) {
       await playRemoteAudio();
     } else {
+      cleanupListenerConnection();
       socket.emit("request-stream");
       setMessage("Requesting live audio...");
     }
