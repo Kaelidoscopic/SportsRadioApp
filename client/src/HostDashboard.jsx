@@ -1,4 +1,4 @@
-import { QRCodeSVG } from "qrcode.react";
+import QRJoinScreen from "./QRJoinScreen";
 
 function HostDashboard({
   currentRoom,
@@ -82,13 +82,7 @@ function HostDashboard({
 
         {statusMessage && <div className="status-banner">{statusMessage}</div>}
 
-        {currentRoom && (
-          <div className="qr-card">
-            <div className="qr-box">
-              <QRCodeSVG value={joinLink} size={180} />
-            </div>
-          </div>
-        )}
+        <QRJoinScreen roomCode={currentRoom} joinUrl={joinLink} />
 
         {currentRoom && (
           <div className="share-actions">

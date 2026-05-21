@@ -3,6 +3,7 @@ import { io } from "socket.io-client";
 import LandingPage from "./LandingPage";
 import HostDashboard from "./HostDashboard";
 import ListenerDashboard from "./ListenerDashboard";
+import ApplianceAdminPage from "./ApplianceAdminPage";
 
 const getSocketUrl = () => {
   if (import.meta.env.VITE_BACKEND_URL) {
@@ -34,6 +35,10 @@ const savedListenerRoomKey = "venueAudioListenerRoomCode";
 const savedListenerWasListeningKey = "venueAudioListenerWasListening";
 
 function App() {
+  const isAdminPage =
+    window.location.pathname === "/admin" ||
+    new URLSearchParams(window.location.search).get("admin") === "1";
+
   const [roomId, setRoomId] = useState("");
   const [currentRoom, setCurrentRoom] = useState("");
   const [role, setRole] = useState("");
@@ -256,7 +261,7 @@ function App() {
       applianceAudioActiveRef.current = false;
       setIsListening(false);
       setNeedsUserAudioGesture(true);
-      setMessage("Tap to Resume Audio.");
+      setMessage("Tap to Start Listening.");
       throw error;
     }
 
@@ -456,7 +461,7 @@ function App() {
       console.error("Failed to restart restored appliance audio:", error);
       if (allowUserGesturePrompt) {
         setNeedsUserAudioGesture(true);
-        setMessage("Tap to Resume Audio.");
+        setMessage("Tap to Start Listening.");
       }
     } finally {
       applianceRestoreInFlightRef.current = false;
@@ -1346,14 +1351,15 @@ function App() {
       localStorage.getItem(savedListenerWasListeningKey) === "true";
 
     if (roomFromUrl) {
-      const cleanRoomCode = roomFromUrl.trim();
+      const cleanRoomCode = roomFromUrl.trim().toUpperCase();
 
       setTimeout(() => {
         linkJoinRoomRef.current = cleanRoomCode;
         linkJoinRetryCountRef.current = 0;
-        shouldRestoreApplianceAudioRef.current = savedWasListening;
+        shouldRestoreApplianceAudioRef.current = true;
         applianceAutoStartAttemptedRef.current = false;
         setNeedsUserAudioGesture(false);
+        setUserPausedListening(false);
         setPreferredLandingMode("listener");
         setMessage(`Joining room ${cleanRoomCode}...`);
         requestJoinRoom(cleanRoomCode);
@@ -1402,6 +1408,15 @@ function App() {
       setTimeout(startListening, 0);
     }
   }, [hostType, isHostLive, role, isListening, userPausedListening]);
+
+  if (isAdminPage) {
+    return (
+      <ApplianceAdminPage
+        socket={socket}
+        isSocketConnected={isSocketConnected}
+      />
+    );
+  }
 
   if (!role) {
     return (

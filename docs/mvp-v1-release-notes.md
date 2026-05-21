@@ -33,7 +33,7 @@ SPORTSYNC_AUDIO_DEVICE=auto
 
 ## Known Limitation
 
-Mobile browsers may block automatic audio playback after refresh, reconnect, or page restoration. In that case, the room restores successfully and the listener is shown a `Tap to Resume Audio` button. This is expected browser autoplay behavior, not a Pi/backend failure.
+Mobile browsers may block automatic audio playback after refresh, reconnect, or page restoration. In that case, the room restores successfully and the listener is shown a `Tap to Start Listening` button. This is expected browser autoplay behavior, not a Pi/backend failure.
 
 ## Validation Checklist
 

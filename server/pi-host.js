@@ -1,11 +1,22 @@
 const { execFile, spawn } = require("child_process");
 require("dotenv").config();
+const fs = require("fs");
 const http = require("http");
 const https = require("https");
+const os = require("os");
+const path = require("path");
+const { io } = require("socket.io-client");
 
 const SERVER_URL = process.env.SPORTSYNC_SERVER_URL || "http://localhost:5000";
-const ROOM_CODE = (process.env.SPORTSYNC_ROOM_CODE || "SPORTS").toUpperCase();
-const AUDIO_DEVICE_SETTING = process.env.SPORTSYNC_AUDIO_DEVICE || "auto";
+const CONFIG_PATH =
+  process.env.SPORTSYNC_CONFIG_PATH ||
+  "/home/kael/sports-sync-pi/appliance-config.json";
+const DEFAULT_CONFIG = {
+  applianceId: process.env.SPORTSYNC_APPLIANCE_ID || "SPORTS_BOX_1",
+  roomCode: (process.env.SPORTSYNC_ROOM_CODE || "SPORTS").toUpperCase(),
+  audioDevice: process.env.SPORTSYNC_AUDIO_DEVICE || "auto",
+  enabled: process.env.SPORTSYNC_AUDIO_ENABLED !== "false"
+};
 let audioDevice = null;
 const SAMPLE_RATE = Number(process.env.SPORTSYNC_SAMPLE_RATE || 44100);
 const CHANNELS = Number(process.env.SPORTSYNC_CHANNELS || 2);
@@ -16,8 +27,50 @@ const ROOM_404_EXIT_AFTER_MS = Number(
   process.env.SPORTSYNC_ROOM_404_EXIT_AFTER_MS || 10000
 );
 
+const sanitizeRoomCode = (code) =>
+  String(code || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+const readApplianceConfig = () => {
+  try {
+    if (!fs.existsSync(CONFIG_PATH)) return { ...DEFAULT_CONFIG };
+
+    return {
+      ...DEFAULT_CONFIG,
+      ...JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"))
+    };
+  } catch (error) {
+    console.error(`Failed to read appliance config: ${error.message}`);
+    return { ...DEFAULT_CONFIG };
+  }
+};
+
+const writeApplianceConfig = () => {
+  try {
+    fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(
+      CONFIG_PATH,
+      `${JSON.stringify(applianceConfigState, null, 2)}\n`
+    );
+  } catch (error) {
+    console.error(`Failed to write appliance config: ${error.message}`);
+  }
+};
+
+let applianceConfigState = readApplianceConfig();
+applianceConfigState.roomCode = sanitizeRoomCode(applianceConfigState.roomCode);
+if (!fs.existsSync(CONFIG_PATH)) {
+  writeApplianceConfig();
+}
+
+let applianceId = applianceConfigState.applianceId;
+let roomCode = applianceConfigState.roomCode || "SPORTS";
+let audioDeviceSetting = applianceConfigState.audioDevice || "auto";
+let audioEnabled = applianceConfigState.enabled !== false;
+let commandSocket = null;
+const startedAt = Date.now();
+
 const applianceRoomPath = (action) =>
-  `/api/appliance/rooms/${ROOM_CODE}/${action}`;
+  `/api/appliance/rooms/${roomCode}/${action}`;
 
 const request = (path, body, contentType) =>
   new Promise((resolve, reject) => {
@@ -64,12 +117,19 @@ const request = (path, body, contentType) =>
 const postJson = (path, data) =>
   request(path, JSON.stringify(data), "application/json");
 
-const applianceConfig = {
+const getStatusPayload = () => ({
+  applianceId,
+  name: applianceId,
+  roomCode,
+  online: true,
+  audioStatus: audioEnabled && arecord ? "running" : "stopped",
+  uptime: Math.floor((Date.now() - startedAt) / 1000),
+  lastHeartbeat: new Date().toISOString(),
   sampleRate: SAMPLE_RATE,
   channels: CHANNELS,
   encoding: "pcm_s16le",
-  label: "Raspberry Pi Zero 2 W"
-};
+  label: os.hostname() || "Raspberry Pi appliance"
+});
 
 let shuttingDown = false;
 let arecord = null;
@@ -104,6 +164,12 @@ const setAudioUploading = (uploading) => {
       ? "Audio upload resumed."
       : "Audio uploads paused until the backend is ready."
   );
+};
+
+const emitStatus = () => {
+  if (commandSocket?.connected) {
+    commandSocket.emit("appliance:status", getStatusPayload());
+  }
 };
 
 const isRoomMissingError = (error) =>
@@ -141,11 +207,12 @@ const markRoomLost = (reason) => {
 };
 
 const startRoom = async () => {
-  await postJson(applianceRoomPath("start"), applianceConfig);
+  await postJson(applianceRoomPath("start"), getStatusPayload());
   roomRegistered = true;
   clearRoomMissingWatchdog();
   setBackendOnline(true);
-  console.log(`Room re-registered. ${ROOM_CODE} is online at ${SERVER_URL}.`);
+  emitStatus();
+  console.log(`Room re-registered. ${roomCode} is online at ${SERVER_URL}.`);
 };
 
 const ensureRoomRegistered = async () => {
@@ -216,6 +283,11 @@ const handleRecoverableError = async (label, error) => {
 };
 
 const sendHeartbeat = async () => {
+  if (!audioEnabled) {
+    emitStatus();
+    return;
+  }
+
   if (!roomRegistered) {
     scheduleRetry();
     return;
@@ -224,9 +296,10 @@ const sendHeartbeat = async () => {
   try {
     await postJson(
       applianceRoomPath("heartbeat"),
-      applianceConfig
+      getStatusPayload()
     );
     setBackendOnline(true);
+    emitStatus();
   } catch (error) {
     await handleRecoverableError("Heartbeat", error);
   }
@@ -272,10 +345,10 @@ const detectUsbAudioDevice = () =>
 
 const resolveAudioDevice = async () => {
   if (
-    AUDIO_DEVICE_SETTING &&
-    AUDIO_DEVICE_SETTING.trim().toLowerCase() !== "auto"
+    audioDeviceSetting &&
+    audioDeviceSetting.trim().toLowerCase() !== "auto"
   ) {
-    audioDevice = AUDIO_DEVICE_SETTING.trim();
+    audioDevice = audioDeviceSetting.trim();
     console.log(`Pi host audio device: ${audioDevice}`);
     return audioDevice;
   }
@@ -301,7 +374,24 @@ const scheduleCaptureStart = () => {
   }, 3000);
 };
 
+const stopCapture = () => {
+  if (audioDetectionTimer) {
+    clearTimeout(audioDetectionTimer);
+    audioDetectionTimer = null;
+  }
+
+  if (arecord) {
+    arecord.kill("SIGTERM");
+    arecord = null;
+  }
+
+  setAudioUploading(false);
+  emitStatus();
+};
+
 const startCapture = () => {
+  if (!audioEnabled) return;
+
   if (arecord && !arecord.killed) return;
 
   resolveAudioDevice()
@@ -382,31 +472,129 @@ const stopRoom = async () => {
     clearTimeout(retryTimer);
   }
 
-  if (audioDetectionTimer) {
-    clearTimeout(audioDetectionTimer);
-  }
-
-  if (arecord) {
-    arecord.kill("SIGTERM");
-  }
+  stopCapture();
 
   try {
     await postJson(applianceRoomPath("stop"), {});
   } catch (error) {
     console.error("Stop request failed:", error.message);
   }
+
+  commandSocket?.disconnect();
+};
+
+const applyConfig = (updates = {}) => {
+  applianceConfigState = {
+    ...applianceConfigState,
+    ...updates
+  };
+  applianceConfigState.roomCode = sanitizeRoomCode(applianceConfigState.roomCode);
+  applianceConfigState.audioDevice = applianceConfigState.audioDevice || "auto";
+  applianceConfigState.enabled = applianceConfigState.enabled !== false;
+
+  applianceId = applianceConfigState.applianceId || applianceId;
+  roomCode = applianceConfigState.roomCode || roomCode;
+  audioDeviceSetting = applianceConfigState.audioDevice;
+  audioEnabled = applianceConfigState.enabled;
+  writeApplianceConfig();
+};
+
+const changeRoomCode = async (nextRoomCode) => {
+  const cleanRoomCode = sanitizeRoomCode(nextRoomCode);
+
+  if (!cleanRoomCode || cleanRoomCode === roomCode) return;
+
+  const previousRoomPath = applianceRoomPath("stop");
+  applyConfig({ roomCode: cleanRoomCode });
+  roomRegistered = false;
+  applianceAutoRestart();
+
+  try {
+    await postJson(previousRoomPath, {});
+  } catch (error) {
+    console.error("Previous room stop failed:", error.message);
+  }
+
+  await ensureRoomRegistered();
+  emitStatus();
+};
+
+const startAudioCommand = async () => {
+  applyConfig({ enabled: true });
+  audioEnabled = true;
+  startCapture();
+  await ensureRoomRegistered();
+  emitStatus();
+};
+
+const stopAudioCommand = async () => {
+  applyConfig({ enabled: false });
+  audioEnabled = false;
+  stopCapture();
+  roomRegistered = false;
+
+  try {
+    await postJson(applianceRoomPath("stop"), {});
+  } catch (error) {
+    console.error("Audio stop room update failed:", error.message);
+  }
+
+  emitStatus();
+};
+
+const applianceAutoRestart = () => {
+  clearRoomMissingWatchdog();
+  setAudioUploading(false);
+  if (retryTimer) {
+    clearTimeout(retryTimer);
+    retryTimer = null;
+  }
+};
+
+const connectCommandSocket = () => {
+  commandSocket = io(SERVER_URL, {
+    transports: ["websocket", "polling"],
+    auth: PI_HOST_TOKEN ? { token: PI_HOST_TOKEN } : undefined,
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000
+  });
+
+  commandSocket.on("connect", () => {
+    commandSocket.emit("appliance:register", getStatusPayload());
+  });
+
+  commandSocket.on("appliance:set-room-code", async ({ roomCode: nextRoomCode }) => {
+    await changeRoomCode(nextRoomCode);
+  });
+
+  commandSocket.on("appliance:start-audio", startAudioCommand);
+  commandSocket.on("appliance:stop-audio", stopAudioCommand);
+  commandSocket.on("appliance:restart", () => {
+    console.log("Restart command received.");
+    process.exit(1);
+  });
 };
 
 const main = async () => {
   console.log(`Pi host server URL: ${SERVER_URL}`);
-  console.log(`Pi host room code: ${ROOM_CODE}`);
-  console.log(`Pi host audio device setting: ${AUDIO_DEVICE_SETTING}`);
+  console.log(`Pi host appliance ID: ${applianceId}`);
+  console.log(`Pi host room code: ${roomCode}`);
+  console.log(`Pi host audio device setting: ${audioDeviceSetting}`);
   console.log(`Start endpoint: ${applianceRoomPath("start")}`);
   console.log(`Heartbeat endpoint: ${applianceRoomPath("heartbeat")}`);
   console.log(`Audio endpoint: ${applianceRoomPath("audio")}`);
 
-  startCapture();
-  if (!(await ensureRoomRegistered())) {
+  connectCommandSocket();
+
+  if (audioEnabled) {
+    startCapture();
+  } else {
+    console.log("Audio capture is disabled by appliance config.");
+  }
+
+  if (audioEnabled && !(await ensureRoomRegistered())) {
     scheduleRetry();
   }
 

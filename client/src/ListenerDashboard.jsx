@@ -65,7 +65,7 @@ function ListenerDashboard({
               onClick={resumeApplianceAudio}
               disabled={!isHostLive || !isSocketConnected}
             >
-              Tap to Resume Audio
+              Tap to Start Listening
             </button>
           )}
 

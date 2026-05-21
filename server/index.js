@@ -19,6 +19,9 @@ const io = new Server(server, {
 const rooms = {};
 const APPLIANCE_HOST_PREFIX = "appliance:";
 const APPLIANCE_OFFLINE_AFTER_MS = 10000;
+const appliances = {};
+const applianceSockets = {};
+const adminSockets = new Set();
 
 const getPublicRooms = () =>
   Object.entries(rooms)
@@ -32,6 +35,72 @@ const getPublicRooms = () =>
 
 const emitRoomsList = () => {
   io.emit("rooms-list", getPublicRooms());
+};
+
+const getApplianceCards = () =>
+  Object.values(appliances).map((appliance) => {
+    const room = rooms[appliance.roomCode];
+
+    return {
+      ...appliance,
+      online: Boolean(appliance.online),
+      broadcasting: Boolean(room?.isBroadcasting),
+      listenerCount: room?.listeners.length || 0
+    };
+  });
+
+const emitApplianceList = () => {
+  const list = getApplianceCards();
+
+  adminSockets.forEach((socketId) => {
+    io.to(socketId).emit("admin:appliances", list);
+  });
+};
+
+const updateApplianceStatus = (payload = {}, socketId = null) => {
+  const applianceId = String(payload.applianceId || "").trim();
+
+  if (!applianceId) return null;
+
+  appliances[applianceId] = {
+    applianceId,
+    name: payload.name || applianceId,
+    roomCode: sanitizeRoomCode(payload.roomCode || "SPORTS"),
+    online: payload.online !== false,
+    audioStatus: payload.audioStatus || "unknown",
+    uptime: Number(payload.uptime) || 0,
+    lastHeartbeat: payload.lastHeartbeat || new Date().toISOString(),
+    socketId: socketId || appliances[applianceId]?.socketId || null
+  };
+
+  if (socketId) {
+    applianceSockets[applianceId] = socketId;
+  }
+
+  emitApplianceList();
+  return appliances[applianceId];
+};
+
+const sendApplianceCommand = (socket, applianceId, eventName, payload = {}) => {
+  if (!adminSockets.has(socket.id)) {
+    socket.emit("admin:error", "Admin authentication required.");
+    return;
+  }
+
+  const targetSocketId = applianceSockets[applianceId];
+
+  if (!targetSocketId) {
+    socket.emit("admin:error", "Appliance is offline.");
+    return;
+  }
+
+  io.to(targetSocketId).emit(eventName, payload);
+};
+
+const isAuthorizedApplianceSocket = (socket) => {
+  if (!process.env.PI_HOST_TOKEN) return true;
+
+  return socket.handshake.auth?.token === process.env.PI_HOST_TOKEN;
 };
 
 const closeRoom = (roomId, reason) => {
@@ -86,6 +155,7 @@ const createRoomState = ({
 const updateApplianceRoom = (roomId, appliance = {}) => {
   const existingRoom = rooms[roomId];
   const nextApplianceState = {
+    applianceId: appliance.applianceId || null,
     sampleRate: Number(appliance.sampleRate) || 44100,
     channels: Number(appliance.channels) || 2,
     encoding: appliance.encoding || "pcm_s16le",
@@ -135,6 +205,13 @@ const updateApplianceRoom = (roomId, appliance = {}) => {
   });
 
   emitRoomsList();
+  updateApplianceStatus({
+    applianceId: room.appliance?.applianceId,
+    roomCode: roomId,
+    online: true,
+    audioStatus: "running",
+    lastHeartbeat: new Date().toISOString()
+  });
 
   return { room };
 };
@@ -412,6 +489,20 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", () => {
     console.log(`User disconnected: ${socket.id}`);
+    adminSockets.delete(socket.id);
+
+    for (const applianceId in applianceSockets) {
+      if (applianceSockets[applianceId] === socket.id) {
+        delete applianceSockets[applianceId];
+
+        if (appliances[applianceId]) {
+          appliances[applianceId].online = false;
+          appliances[applianceId].lastHeartbeat = new Date().toISOString();
+        }
+
+        emitApplianceList();
+      }
+    }
 
     for (const roomId in rooms) {
       const room = rooms[roomId];
@@ -485,6 +576,70 @@ io.on("connection", (socket) => {
 
     console.log(`Host recovered room ${roomId}`);
     emitRoomsList();
+  });
+
+  socket.on("appliance:register", (payload = {}) => {
+    if (!isAuthorizedApplianceSocket(socket)) {
+      socket.emit("admin:error", "Invalid appliance token.");
+      socket.disconnect(true);
+      return;
+    }
+
+    updateApplianceStatus(payload, socket.id);
+    socket.emit("appliance:registered", { ok: true });
+  });
+
+  socket.on("appliance:status", (payload = {}) => {
+    if (!isAuthorizedApplianceSocket(socket)) return;
+    updateApplianceStatus(payload, socket.id);
+  });
+
+  socket.on("admin:authenticate", ({ pin } = {}, callback) => {
+    const adminPin = process.env.ADMIN_PIN || process.env.SPORTSYNC_ADMIN_PIN;
+
+    if (!adminPin) {
+      callback?.({ ok: false, error: "Admin PIN is not configured." });
+      return;
+    }
+
+    if (String(pin || "") !== String(adminPin)) {
+      callback?.({ ok: false, error: "Invalid admin PIN." });
+      return;
+    }
+
+    adminSockets.add(socket.id);
+    socket.emit("admin:appliances", getApplianceCards());
+    callback?.({ ok: true });
+  });
+
+  socket.on("admin:get-appliances", () => {
+    if (!adminSockets.has(socket.id)) return;
+    socket.emit("admin:appliances", getApplianceCards());
+  });
+
+  socket.on("admin:set-room-code", ({ applianceId, roomCode } = {}) => {
+    const nextRoomCode = sanitizeRoomCode(roomCode || "");
+
+    if (!nextRoomCode) {
+      socket.emit("admin:error", "Room code is required.");
+      return;
+    }
+
+    sendApplianceCommand(socket, applianceId, "appliance:set-room-code", {
+      roomCode: nextRoomCode
+    });
+  });
+
+  socket.on("admin:start-audio", ({ applianceId } = {}) => {
+    sendApplianceCommand(socket, applianceId, "appliance:start-audio");
+  });
+
+  socket.on("admin:stop-audio", ({ applianceId } = {}) => {
+    sendApplianceCommand(socket, applianceId, "appliance:stop-audio");
+  });
+
+  socket.on("admin:restart", ({ applianceId } = {}) => {
+    sendApplianceCommand(socket, applianceId, "appliance:restart");
   });
 });
 
