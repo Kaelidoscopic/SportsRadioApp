@@ -9,7 +9,7 @@ The Raspberry Pi appliance audio system has reached a stable MVP milestone. A Ra
 - Pi appliance auto-start: the Pi runs `pi-host.js` under the `sports-sync-pi` systemd service on boot.
 - TV AUX capture: real TV AUX output into the Sabrent USB audio adapter has been verified.
 - Automatic audio device detection: `SPORTSYNC_AUDIO_DEVICE=auto` detects the current ALSA USB capture device, avoiding card-number changes after reboot.
-- Fixed room appliance hosting: room `SPORTS` can be hosted by the Pi appliance.
+- Fixed room appliance hosting: room `HOME` can be hosted by the Pi appliance.
 - Automatic backend recovery: the Pi retries backend registration, re-registers its appliance room after backend restart, and falls back to systemd restart on sustained room recovery failure.
 - Listener auto-reconnect: desktop and phone listeners can restore the room after refresh/backend recovery.
 - Production deployment readiness: production env examples are available for the Vercel frontend, Render backend, and Pi appliance.
@@ -27,7 +27,7 @@ Pi production env:
 
 ```env
 SPORTSYNC_SERVER_URL=https://sportsradioapp.onrender.com
-SPORTSYNC_ROOM_CODE=SPORTS
+SPORTSYNC_ROOM_CODE=HOME
 SPORTSYNC_AUDIO_DEVICE=auto
 ```
 
@@ -39,7 +39,7 @@ Mobile browsers may block automatic audio playback after refresh, reconnect, or 
 
 - Pi boots and starts `sports-sync-pi.service`.
 - Logs show the detected USB audio capture device.
-- Room `SPORTS` appears online.
+- Room `HOME` appears online.
 - Desktop listener can join and hear TV AUX audio.
 - Phone listener can join and hear TV AUX audio.
 - Page refresh restores the listener room.

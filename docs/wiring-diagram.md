@@ -32,6 +32,6 @@ HDMI source
 ## Signal Path Notes
 
 - The Pi does not need a microphone. It captures line-level audio through the USB audio adapter.
-- The Pi publishes audio to the backend as a fixed appliance room, currently `SPORTS`.
+- The Pi publishes audio to the backend as a fixed appliance room, currently `HOME`.
 - Listeners join the room from the web app and receive the appliance audio stream.
 - Mobile browsers may require one tap to resume audio after refresh or reconnect because of autoplay rules.

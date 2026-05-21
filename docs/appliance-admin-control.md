@@ -7,7 +7,7 @@ Appliance admin mode lets the owner control Raspberry Pi audio boxes from a phon
 Set an admin PIN on the backend environment:
 
 ```env
-ADMIN_PIN=change-this-pin
+ADMIN_PIN=5235
 ```
 
 `SPORTSYNC_ADMIN_PIN` is also supported. If neither value is configured, the admin page will stay locked.
@@ -30,8 +30,8 @@ Each Pi should have a stable appliance ID:
 
 ```env
 SPORTSYNC_SERVER_URL=https://sportsradioapp.onrender.com
-SPORTSYNC_APPLIANCE_ID=SPORTS_BOX_1
-SPORTSYNC_ROOM_CODE=SPORTS
+SPORTSYNC_APPLIANCE_ID=HOUSE_BOX_1
+SPORTSYNC_ROOM_CODE=HOME
 SPORTSYNC_AUDIO_DEVICE=auto
 ```
 
@@ -56,8 +56,8 @@ Example:
 
 ```json
 {
-  "applianceId": "SPORTS_BOX_1",
-  "roomCode": "SPORTS",
+  "applianceId": "HOUSE_BOX_1",
+  "roomCode": "HOME",
   "audioDevice": "auto",
   "enabled": true
 }

@@ -17,7 +17,7 @@ TV / HDMI source
   -> listener phones / browsers
 ```
 
-The Pi runs `server/pi-host.js` under systemd, captures audio with `arecord`, registers a fixed room code such as `SPORTS`, and streams audio chunks to the backend. Listeners join the room from the web app.
+The Pi runs `server/pi-host.js` under systemd, captures audio with `arecord`, registers a fixed room code such as `HOME`, and streams audio chunks to the backend. Listeners join the room from the web app.
 
 Key appliance docs:
 
@@ -58,8 +58,8 @@ Example local Pi env:
 
 ```env
 SPORTSYNC_SERVER_URL=http://10.0.0.138:5000
-SPORTSYNC_APPLIANCE_ID=SPORTS_BOX_1
-SPORTSYNC_ROOM_CODE=SPORTS
+SPORTSYNC_APPLIANCE_ID=HOUSE_BOX_1
+SPORTSYNC_ROOM_CODE=HOME
 SPORTSYNC_AUDIO_DEVICE=auto
 ```
 
@@ -91,15 +91,15 @@ Pi production env:
 
 ```env
 SPORTSYNC_SERVER_URL=https://sportsradioapp.onrender.com
-SPORTSYNC_APPLIANCE_ID=SPORTS_BOX_1
-SPORTSYNC_ROOM_CODE=SPORTS
+SPORTSYNC_APPLIANCE_ID=HOUSE_BOX_1
+SPORTSYNC_ROOM_CODE=HOME
 SPORTSYNC_AUDIO_DEVICE=auto
 ```
 
 Backend admin env:
 
 ```env
-ADMIN_PIN=change-this-pin
+ADMIN_PIN=5235
 ```
 
 Production flow:
@@ -109,7 +109,7 @@ Production flow:
 3. Copy `server/pi-host.js`, `server/package.json`, and `server/package-lock.json` to `/home/kael/sports-sync-pi` on the Pi.
 4. Create `/home/kael/sports-sync-pi/.env` with the production Pi env values.
 5. Enable the `sports-sync-pi.service` systemd service.
-6. Confirm room `SPORTS` appears online and listener phones can hear appliance audio.
+6. Confirm room `HOME` appears online and listener phones can hear appliance audio.
 
 Owners can open `/admin`, enter the backend admin PIN, and control registered Pi appliances from a phone.
 

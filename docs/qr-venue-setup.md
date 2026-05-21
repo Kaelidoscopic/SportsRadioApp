@@ -10,7 +10,7 @@ The listener link format is:
 https://sports-radio-app.vercel.app/?room=HOME
 ```
 
-Replace `HOME` with the venue room code, such as `SPORTS`.
+Replace `HOME` with the venue room code if you use a different appliance room.
 
 When a customer opens the link, the app detects `?room=`, prefills the room code, and attempts to join automatically.
 

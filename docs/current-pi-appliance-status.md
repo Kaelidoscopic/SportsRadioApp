@@ -6,11 +6,11 @@ This reflects the confirmed Raspberry Pi appliance prototype status for SportsRa
 
 - Raspberry Pi Zero 2 W boots and auto-starts the `sports-sync-pi` systemd service.
 - `pi-host.js` runs from `/home/kael/sports-sync-pi`.
-- Room code `SPORTS` is used for the appliance room.
+- Room code `HOME` is used for the appliance room.
 - Local backend target is `http://10.0.0.138:5000`.
 - USB audio capture works through the Sabrent USB External Stereo Sound Adapter.
 - Real TV AUX output into the USB sound card has been tested successfully.
-- Browser listeners can join room `SPORTS` and hear the appliance audio.
+- Browser listeners can join room `HOME` and hear the appliance audio.
 - Backend restart recovery works: the Pi can re-register the appliance room after the backend returns.
 - Listener auto-reconnect works after backend restart and Pi room recovery.
 

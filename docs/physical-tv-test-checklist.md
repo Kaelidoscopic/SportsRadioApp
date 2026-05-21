@@ -13,13 +13,13 @@ Use this checklist before considering the Raspberry Pi appliance flow stable for
 sudo systemctl status sports-sync-pi.service
 ```
 
-5. Watch Pi logs and confirm room `SPORTS` is online:
+5. Watch Pi logs and confirm room `HOME` is online:
 
 ```bash
 journalctl -u sports-sync-pi.service -f
 ```
 
-6. Join room `SPORTS` from a listener browser and confirm TV AUX audio is audible.
+6. Join room `HOME` from a listener browser and confirm TV AUX audio is audible.
 
 ## Reboot Test
 
@@ -32,12 +32,12 @@ sudo reboot
 2. Wait for the Pi to come back online.
 3. Confirm `sports-sync-pi.service` auto-started.
 4. Confirm logs show `SPORTSYNC_AUDIO_DEVICE=auto` resolved to a `plughw:X,Y` device.
-5. Confirm room `SPORTS` appears again without manually starting `pi-host`.
+5. Confirm room `HOME` appears again without manually starting `pi-host`.
 6. Confirm listener audio works.
 
 ## Backend Restart Test
 
-1. Start listening to room `SPORTS`.
+1. Start listening to room `HOME`.
 2. Stop the backend server.
 3. Confirm Pi logs show backend unavailable and retrying.
 4. Restart the backend server.
@@ -47,7 +47,7 @@ sudo reboot
 ## Listener Phone Test
 
 1. Open the app from a phone on the same network.
-2. Join room `SPORTS`.
+2. Join room `HOME`.
 3. Confirm audio starts after the user gesture required by the browser.
 4. Lock/unlock the phone or switch apps briefly.
 5. Return to the browser and confirm Reconnect Audio restores playback if needed.
@@ -57,5 +57,5 @@ sudo reboot
 1. Connect the HDMI source through an HDMI audio extractor.
 2. Route extractor analog output into the Sabrent USB sound card input.
 3. Confirm `arecord -l` still detects the USB Audio Device.
-4. Confirm room `SPORTS` streams extractor audio to listeners.
+4. Confirm room `HOME` streams extractor audio to listeners.
 5. Compare sync and level against the direct TV AUX setup.

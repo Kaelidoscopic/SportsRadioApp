@@ -12,8 +12,8 @@ const CONFIG_PATH =
   process.env.SPORTSYNC_CONFIG_PATH ||
   "/home/kael/sports-sync-pi/appliance-config.json";
 const DEFAULT_CONFIG = {
-  applianceId: process.env.SPORTSYNC_APPLIANCE_ID || "SPORTS_BOX_1",
-  roomCode: (process.env.SPORTSYNC_ROOM_CODE || "SPORTS").toUpperCase(),
+  applianceId: process.env.SPORTSYNC_APPLIANCE_ID || "HOUSE_BOX_1",
+  roomCode: (process.env.SPORTSYNC_ROOM_CODE || "HOME").toUpperCase(),
   audioDevice: process.env.SPORTSYNC_AUDIO_DEVICE || "auto",
   enabled: process.env.SPORTSYNC_AUDIO_ENABLED !== "false"
 };
@@ -63,7 +63,7 @@ if (!fs.existsSync(CONFIG_PATH)) {
 }
 
 let applianceId = applianceConfigState.applianceId;
-let roomCode = applianceConfigState.roomCode || "SPORTS";
+let roomCode = applianceConfigState.roomCode || "HOME";
 let audioDeviceSetting = applianceConfigState.audioDevice || "auto";
 let audioEnabled = applianceConfigState.enabled !== false;
 let commandSocket = null;

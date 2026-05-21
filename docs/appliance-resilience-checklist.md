@@ -4,13 +4,13 @@ Use this checklist after changes to the Raspberry Pi appliance host flow.
 
 1. Start the backend server.
 2. Start the client app.
-3. Start `pi-host` on the Raspberry Pi with `SPORTSYNC_ROOM_CODE=SPORTS`.
-4. Join room `SPORTS` from a listener browser.
+3. Start `pi-host` on the Raspberry Pi with `SPORTSYNC_ROOM_CODE=HOME`.
+4. Join room `HOME` from a listener browser.
 5. Confirm Pi appliance audio is playing.
 6. Stop the backend server.
 7. Confirm `pi-host` keeps running and logs that the backend is down.
 8. Restart the backend server.
-9. Confirm `pi-host` re-registers room `SPORTS` automatically.
+9. Confirm `pi-host` re-registers room `HOME` automatically.
 10. Confirm the listener reconnects and audio resumes without leaving the room.
 11. Press Reconnect Audio and confirm appliance playback restarts without leaving or rejoining.
 
@@ -33,7 +33,7 @@ Restart=on-failure
 RestartSec=3
 User=kael
 Environment=SPORTSYNC_SERVER_URL=http://10.0.0.138:5000
-Environment=SPORTSYNC_ROOM_CODE=SPORTS
+Environment=SPORTSYNC_ROOM_CODE=HOME
 Environment=SPORTSYNC_AUDIO_DEVICE=plughw:1,0
 Environment=SPORTSYNC_SAMPLE_RATE=44100
 Environment=SPORTSYNC_CHANNELS=2

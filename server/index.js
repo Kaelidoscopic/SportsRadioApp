@@ -2,6 +2,7 @@ const express = require("express");
 const http = require("http");
 const cors = require("cors");
 const { Server } = require("socket.io");
+require("dotenv").config();
 
 const app = express();
 app.use(cors());
@@ -65,7 +66,7 @@ const updateApplianceStatus = (payload = {}, socketId = null) => {
   appliances[applianceId] = {
     applianceId,
     name: payload.name || applianceId,
-    roomCode: sanitizeRoomCode(payload.roomCode || "SPORTS"),
+    roomCode: sanitizeRoomCode(payload.roomCode || "HOME"),
     online: payload.online !== false,
     audioStatus: payload.audioStatus || "unknown",
     uptime: Number(payload.uptime) || 0,

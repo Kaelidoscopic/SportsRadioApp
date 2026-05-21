@@ -25,7 +25,7 @@ Create `/home/kael/sports-sync-pi/.env`:
 ```bash
 cat >/home/kael/sports-sync-pi/.env <<'EOF'
 SPORTSYNC_SERVER_URL=http://10.0.0.138:5000
-SPORTSYNC_ROOM_CODE=SPORTS
+SPORTSYNC_ROOM_CODE=HOME
 SPORTSYNC_AUDIO_DEVICE=auto
 EOF
 ```
@@ -84,7 +84,7 @@ Expected startup logs include the configured server, room, audio-device setting,
 
 ```text
 Pi host server URL: http://10.0.0.138:5000
-Pi host room code: SPORTS
+Pi host room code: HOME
 Pi host audio device setting: auto
 Detected USB audio capture device: plughw:0,0
 ```

@@ -25,8 +25,8 @@ Create `/home/kael/sports-sync-pi/.env`:
 ```bash
 cat >/home/kael/sports-sync-pi/.env <<'EOF'
 SPORTSYNC_SERVER_URL=https://sportsradioapp.onrender.com
-SPORTSYNC_APPLIANCE_ID=SPORTS_BOX_1
-SPORTSYNC_ROOM_CODE=SPORTS
+SPORTSYNC_APPLIANCE_ID=HOUSE_BOX_1
+SPORTSYNC_ROOM_CODE=HOME
 SPORTSYNC_AUDIO_DEVICE=auto
 EOF
 ```
@@ -35,8 +35,8 @@ For local testing, use the local backend URL instead:
 
 ```env
 SPORTSYNC_SERVER_URL=http://10.0.0.138:5000
-SPORTSYNC_APPLIANCE_ID=SPORTS_BOX_1
-SPORTSYNC_ROOM_CODE=SPORTS
+SPORTSYNC_APPLIANCE_ID=HOUSE_BOX_1
+SPORTSYNC_ROOM_CODE=HOME
 SPORTSYNC_AUDIO_DEVICE=auto
 ```
 
@@ -95,10 +95,10 @@ Expected logs include:
 
 ```text
 Pi host server URL: https://sportsradioapp.onrender.com
-Pi host room code: SPORTS
+Pi host room code: HOME
 Pi host audio device setting: auto
 Detected USB audio capture device: plughw:X,Y
-Room re-registered. SPORTS is online at https://sportsradioapp.onrender.com.
+Room re-registered. HOME is online at https://sportsradioapp.onrender.com.
 ```
 
 ## Reboot Recovery Behavior
