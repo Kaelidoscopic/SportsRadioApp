@@ -24,11 +24,110 @@ const appliances = {};
 const applianceSockets = {};
 const adminSockets = new Set();
 
+const nowIso = () => new Date().toISOString();
+
+const requireUserId = (req, res) => {
+  const userId = String(req.get("x-user-id") || "").trim();
+
+  if (!userId) {
+    res.status(401).json({ error: "User account is required." });
+    return null;
+  }
+
+  return userId;
+};
+
+const getDefaultPairingCode = (applianceId) =>
+  String(applianceId || "").trim().toUpperCase();
+
+const getManagedAppliance = (applianceId) => appliances[applianceId] || null;
+
+const createOrUpdateManagedAppliance = (payload = {}, socketId = null) => {
+  const applianceId = String(payload.applianceId || "").trim();
+
+  if (!applianceId) return null;
+
+  const existing = appliances[applianceId] || {};
+  const roomCode = sanitizeRoomCode(payload.roomCode || existing.roomCode || "HOME");
+  const room = rooms[roomCode];
+  const isAudioEnabled =
+    typeof payload.isAudioEnabled === "boolean"
+      ? payload.isAudioEnabled
+      : payload.audioStatus
+        ? payload.audioStatus === "running"
+        : Boolean(existing.isAudioEnabled);
+  const isRoomActive =
+    typeof payload.isRoomActive === "boolean"
+      ? payload.isRoomActive
+      : Boolean(existing.isRoomActive || room?.hostSocketId);
+  const timestamp = nowIso();
+
+  appliances[applianceId] = {
+    applianceId,
+    ownerUserId: existing.ownerUserId || payload.ownerUserId || null,
+    pairingCode:
+      payload.pairingCode || existing.pairingCode || getDefaultPairingCode(applianceId),
+    displayName: payload.displayName || payload.name || existing.displayName || applianceId,
+    roomCode,
+    roomName: payload.roomName || existing.roomName || roomCode,
+    isOnline: payload.online !== false,
+    isAudioEnabled,
+    isRoomActive,
+    lastHeartbeat: payload.lastHeartbeat || timestamp,
+    listenerCount: room?.listeners.length || existing.listenerCount || 0,
+    createdAt: existing.createdAt || timestamp,
+    updatedAt: timestamp,
+    audioStatus: payload.audioStatus || existing.audioStatus || "unknown",
+    uptime: Number(payload.uptime) || existing.uptime || 0,
+    socketId: socketId || existing.socketId || null
+  };
+
+  if (socketId) {
+    applianceSockets[applianceId] = socketId;
+  }
+
+  return appliances[applianceId];
+};
+
+const toOwnerApplianceDto = (appliance) => {
+  const room = rooms[appliance.roomCode];
+
+  return {
+    applianceId: appliance.applianceId,
+    ownerUserId: appliance.ownerUserId,
+    displayName: appliance.displayName,
+    roomCode: appliance.roomCode,
+    roomName: appliance.roomName,
+    isOnline: Boolean(appliance.isOnline),
+    isAudioEnabled: Boolean(appliance.isAudioEnabled),
+    isRoomActive: Boolean(appliance.isRoomActive || room?.hostSocketId),
+    lastHeartbeat: appliance.lastHeartbeat,
+    listenerCount: room?.listeners.length || appliance.listenerCount || 0,
+    createdAt: appliance.createdAt,
+    updatedAt: appliance.updatedAt
+  };
+};
+
+const getOwnedAppliance = (req, res) => {
+  const userId = requireUserId(req, res);
+  if (!userId) return null;
+
+  const appliance = getManagedAppliance(req.params.id);
+
+  if (!appliance || appliance.ownerUserId !== userId) {
+    res.status(404).json({ error: "Appliance not found." });
+    return null;
+  }
+
+  return appliance;
+};
+
 const getPublicRooms = () =>
   Object.entries(rooms)
     .filter(([, room]) => room.hostSocketId)
     .map(([roomId, room]) => ({
       roomId,
+      roomName: room.appliance?.roomName || roomId,
       isBroadcasting: room.isBroadcasting,
       listenerCount: room.listeners.length,
       hostType: room.hostType || "browser"
@@ -44,7 +143,7 @@ const getApplianceCards = () =>
 
     return {
       ...appliance,
-      online: Boolean(appliance.online),
+      online: Boolean(appliance.isOnline),
       broadcasting: Boolean(room?.isBroadcasting),
       listenerCount: room?.listeners.length || 0
     };
@@ -59,27 +158,30 @@ const emitApplianceList = () => {
 };
 
 const updateApplianceStatus = (payload = {}, socketId = null) => {
-  const applianceId = String(payload.applianceId || "").trim();
+  const appliance = createOrUpdateManagedAppliance(payload, socketId);
 
-  if (!applianceId) return null;
+  if (appliance) {
+    const room = rooms[appliance.roomCode];
 
-  appliances[applianceId] = {
-    applianceId,
-    name: payload.name || applianceId,
-    roomCode: sanitizeRoomCode(payload.roomCode || "HOME"),
-    online: payload.online !== false,
-    audioStatus: payload.audioStatus || "unknown",
-    uptime: Number(payload.uptime) || 0,
-    lastHeartbeat: payload.lastHeartbeat || new Date().toISOString(),
-    socketId: socketId || appliances[applianceId]?.socketId || null
-  };
+    if (room?.hostType === "appliance") {
+      room.isBroadcasting = Boolean(appliance.isAudioEnabled);
+      room.appliance = {
+        ...(room.appliance || {}),
+        roomName: appliance.roomName,
+        lastSeen: Date.now()
+      };
 
-  if (socketId) {
-    applianceSockets[applianceId] = socketId;
+      io.to(appliance.roomCode).emit("broadcast-status", {
+        isBroadcasting: room.isBroadcasting,
+        hostType: "appliance",
+        appliance: room.appliance
+      });
+      emitRoomsList();
+    }
   }
 
   emitApplianceList();
-  return appliances[applianceId];
+  return appliance;
 };
 
 const sendApplianceCommand = (socket, applianceId, eventName, payload = {}) => {
@@ -96,6 +198,15 @@ const sendApplianceCommand = (socket, applianceId, eventName, payload = {}) => {
   }
 
   io.to(targetSocketId).emit(eventName, payload);
+};
+
+const sendCommandToAppliance = (applianceId, eventName, payload = {}) => {
+  const targetSocketId = applianceSockets[applianceId];
+
+  if (!targetSocketId) return false;
+
+  io.to(targetSocketId).emit(eventName, payload);
+  return true;
 };
 
 const isAuthorizedApplianceSocket = (socket) => {
@@ -161,6 +272,7 @@ const updateApplianceRoom = (roomId, appliance = {}) => {
     channels: Number(appliance.channels) || 2,
     encoding: appliance.encoding || "pcm_s16le",
     label: appliance.label || "Pi audio appliance",
+    roomName: appliance.roomName || appliance.displayName || roomId,
     lastSeen: Date.now()
   };
 
@@ -210,8 +322,11 @@ const updateApplianceRoom = (roomId, appliance = {}) => {
     applianceId: room.appliance?.applianceId,
     roomCode: roomId,
     online: true,
+    isRoomActive: true,
+    isAudioEnabled: true,
+    roomName: room.appliance?.roomName,
     audioStatus: "running",
-    lastHeartbeat: new Date().toISOString()
+    lastHeartbeat: nowIso()
   });
 
   return { room };
@@ -221,9 +336,17 @@ const markApplianceOffline = (roomId, reason = "Pi host is offline.") => {
   const room = rooms[roomId];
 
   if (!room || room.hostType !== "appliance") return;
+  const applianceId = room.appliance?.applianceId;
 
   room.hostSocketId = null;
   room.isBroadcasting = false;
+
+  if (applianceId && appliances[applianceId]) {
+    appliances[applianceId].isRoomActive = false;
+    appliances[applianceId].isAudioEnabled = false;
+    appliances[applianceId].listenerCount = room.listeners.length;
+    appliances[applianceId].updatedAt = nowIso();
+  }
 
   io.to(roomId).emit("broadcast-status", {
     isBroadcasting: false,
@@ -232,6 +355,7 @@ const markApplianceOffline = (roomId, reason = "Pi host is offline.") => {
 
   console.log(`${roomId}: ${reason}`);
   emitRoomsList();
+  emitApplianceList();
 };
 
 setInterval(() => {
@@ -497,8 +621,9 @@ io.on("connection", (socket) => {
         delete applianceSockets[applianceId];
 
         if (appliances[applianceId]) {
-          appliances[applianceId].online = false;
-          appliances[applianceId].lastHeartbeat = new Date().toISOString();
+          appliances[applianceId].isOnline = false;
+          appliances[applianceId].lastHeartbeat = nowIso();
+          appliances[applianceId].updatedAt = nowIso();
         }
 
         emitApplianceList();
@@ -744,6 +869,154 @@ app.post(
     res.status(204).end();
   }
 );
+
+app.get("/api/appliances/mine", (req, res) => {
+  const userId = requireUserId(req, res);
+  if (!userId) return;
+
+  res.json({
+    appliances: Object.values(appliances)
+      .filter((appliance) => appliance.ownerUserId === userId)
+      .map(toOwnerApplianceDto)
+  });
+});
+
+app.post("/api/appliances/link", (req, res) => {
+  const userId = requireUserId(req, res);
+  if (!userId) return;
+
+  const pairingCode = String(req.body?.pairingCode || "").trim().toUpperCase();
+
+  if (!pairingCode) {
+    res.status(400).json({ error: "Pairing code is required." });
+    return;
+  }
+
+  const appliance = Object.values(appliances).find(
+    (candidate) => String(candidate.pairingCode || "").toUpperCase() === pairingCode
+  );
+
+  if (!appliance) {
+    res.status(404).json({ error: "No appliance found for that pairing code." });
+    return;
+  }
+
+  if (appliance.ownerUserId && appliance.ownerUserId !== userId) {
+    res.status(409).json({ error: "Appliance is already linked." });
+    return;
+  }
+
+  appliance.ownerUserId = userId;
+  appliance.updatedAt = nowIso();
+
+  res.json({ appliance: toOwnerApplianceDto(appliance) });
+});
+
+app.patch("/api/appliances/:id/settings", (req, res) => {
+  const appliance = getOwnedAppliance(req, res);
+  if (!appliance) return;
+
+  const updates = {};
+
+  if (typeof req.body?.displayName === "string") {
+    updates.displayName = req.body.displayName.trim() || appliance.displayName;
+  }
+
+  if (typeof req.body?.roomName === "string") {
+    updates.roomName = req.body.roomName.trim() || appliance.roomName;
+  }
+
+  if (typeof req.body?.roomCode === "string") {
+    const nextRoomCode = sanitizeRoomCode(req.body.roomCode);
+
+    if (!nextRoomCode) {
+      res.status(400).json({ error: "Room code is required." });
+      return;
+    }
+
+    updates.roomCode = nextRoomCode;
+  }
+
+  Object.assign(appliance, updates, { updatedAt: nowIso() });
+
+  if (updates.roomCode) {
+    sendCommandToAppliance(appliance.applianceId, "appliance:set-room-code", {
+      roomCode: appliance.roomCode
+    });
+  }
+
+  if (updates.roomName) {
+    sendCommandToAppliance(appliance.applianceId, "appliance:set-room-name", {
+      roomName: appliance.roomName
+    });
+  }
+
+  emitApplianceList();
+  res.json({ appliance: toOwnerApplianceDto(appliance) });
+});
+
+app.post("/api/appliances/:id/start-room", (req, res) => {
+  const appliance = getOwnedAppliance(req, res);
+  if (!appliance) return;
+
+  appliance.isRoomActive = true;
+  appliance.updatedAt = nowIso();
+  const delivered = sendCommandToAppliance(
+    appliance.applianceId,
+    "appliance:activate-room",
+    {
+      roomCode: appliance.roomCode,
+      roomName: appliance.roomName
+    }
+  );
+
+  res.json({ appliance: toOwnerApplianceDto(appliance), delivered });
+});
+
+app.post("/api/appliances/:id/stop-room", (req, res) => {
+  const appliance = getOwnedAppliance(req, res);
+  if (!appliance) return;
+
+  appliance.isRoomActive = false;
+  appliance.isAudioEnabled = false;
+  appliance.updatedAt = nowIso();
+  markApplianceOffline(appliance.roomCode, "Owner deactivated appliance room.");
+  const delivered = sendCommandToAppliance(
+    appliance.applianceId,
+    "appliance:deactivate-room"
+  );
+
+  res.json({ appliance: toOwnerApplianceDto(appliance), delivered });
+});
+
+app.post("/api/appliances/:id/start-audio", (req, res) => {
+  const appliance = getOwnedAppliance(req, res);
+  if (!appliance) return;
+
+  appliance.isAudioEnabled = true;
+  appliance.isRoomActive = true;
+  appliance.updatedAt = nowIso();
+  const delivered = sendCommandToAppliance(
+    appliance.applianceId,
+    "appliance:start-audio"
+  );
+
+  res.json({ appliance: toOwnerApplianceDto(appliance), delivered });
+});
+
+app.post("/api/appliances/:id/stop-audio", (req, res) => {
+  const appliance = getOwnedAppliance(req, res);
+  if (!appliance) return;
+
+  appliance.isAudioEnabled = false;
+  appliance.updatedAt = nowIso();
+  const delivered = sendCommandToAppliance(
+    appliance.applianceId,
+    "appliance:stop-audio"
+  );
+
+  res.json({ appliance: toOwnerApplianceDto(appliance), delivered });
+});
 
 app.get("/", (req, res) => {
   res.send("Server is running.");

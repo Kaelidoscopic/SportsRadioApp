@@ -13,9 +13,13 @@ const CONFIG_PATH =
   "/home/kael/sports-sync-pi/appliance-config.json";
 const DEFAULT_CONFIG = {
   applianceId: process.env.SPORTSYNC_APPLIANCE_ID || "HOUSE_BOX_1",
+  displayName: process.env.SPORTSYNC_APPLIANCE_NAME || "House Box 1",
+  pairingCode: process.env.SPORTSYNC_PAIRING_CODE || "HOUSE-5235",
   roomCode: (process.env.SPORTSYNC_ROOM_CODE || "HOME").toUpperCase(),
+  roomName: process.env.SPORTSYNC_ROOM_NAME || "Home Audio",
   audioDevice: process.env.SPORTSYNC_AUDIO_DEVICE || "auto",
-  enabled: process.env.SPORTSYNC_AUDIO_ENABLED !== "false"
+  enabled: process.env.SPORTSYNC_AUDIO_ENABLED !== "false",
+  roomActive: process.env.SPORTSYNC_ROOM_ACTIVE !== "false"
 };
 let audioDevice = null;
 const SAMPLE_RATE = Number(process.env.SPORTSYNC_SAMPLE_RATE || 44100);
@@ -29,6 +33,8 @@ const ROOM_404_EXIT_AFTER_MS = Number(
 
 const sanitizeRoomCode = (code) =>
   String(code || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+const defaultPairingCode = (id) => String(id || "HOUSE_BOX_1").toUpperCase();
 
 const readApplianceConfig = () => {
   try {
@@ -63,9 +69,13 @@ if (!fs.existsSync(CONFIG_PATH)) {
 }
 
 let applianceId = applianceConfigState.applianceId;
+let displayName = applianceConfigState.displayName || applianceId;
+let pairingCode = applianceConfigState.pairingCode || defaultPairingCode(applianceId);
 let roomCode = applianceConfigState.roomCode || "HOME";
+let roomName = applianceConfigState.roomName || roomCode;
 let audioDeviceSetting = applianceConfigState.audioDevice || "auto";
 let audioEnabled = applianceConfigState.enabled !== false;
+let roomActive = applianceConfigState.roomActive !== false;
 let commandSocket = null;
 const startedAt = Date.now();
 
@@ -119,9 +129,14 @@ const postJson = (path, data) =>
 
 const getStatusPayload = () => ({
   applianceId,
-  name: applianceId,
+  name: displayName,
+  displayName,
+  pairingCode,
   roomCode,
+  roomName,
   online: true,
+  isRoomActive: roomActive,
+  isAudioEnabled: audioEnabled,
   audioStatus: audioEnabled && arecord ? "running" : "stopped",
   uptime: Math.floor((Date.now() - startedAt) / 1000),
   lastHeartbeat: new Date().toISOString(),
@@ -216,7 +231,7 @@ const startRoom = async () => {
 };
 
 const ensureRoomRegistered = async () => {
-  if (shuttingDown) return false;
+  if (shuttingDown || !roomActive) return false;
 
   if (registeringRoom) {
     return false;
@@ -283,6 +298,11 @@ const handleRecoverableError = async (label, error) => {
 };
 
 const sendHeartbeat = async () => {
+  if (!roomActive) {
+    emitStatus();
+    return;
+  }
+
   if (!audioEnabled) {
     emitStatus();
     return;
@@ -390,7 +410,7 @@ const stopCapture = () => {
 };
 
 const startCapture = () => {
-  if (!audioEnabled) return;
+  if (!audioEnabled || !roomActive) return;
 
   if (arecord && !arecord.killed) return;
 
@@ -489,13 +509,24 @@ const applyConfig = (updates = {}) => {
     ...updates
   };
   applianceConfigState.roomCode = sanitizeRoomCode(applianceConfigState.roomCode);
+  applianceConfigState.displayName =
+    applianceConfigState.displayName || applianceConfigState.applianceId;
+  applianceConfigState.pairingCode =
+    applianceConfigState.pairingCode || defaultPairingCode(applianceConfigState.applianceId);
+  applianceConfigState.roomName =
+    applianceConfigState.roomName || applianceConfigState.roomCode;
   applianceConfigState.audioDevice = applianceConfigState.audioDevice || "auto";
   applianceConfigState.enabled = applianceConfigState.enabled !== false;
+  applianceConfigState.roomActive = applianceConfigState.roomActive !== false;
 
   applianceId = applianceConfigState.applianceId || applianceId;
+  displayName = applianceConfigState.displayName || applianceId;
+  pairingCode = applianceConfigState.pairingCode || defaultPairingCode(applianceId);
   roomCode = applianceConfigState.roomCode || roomCode;
+  roomName = applianceConfigState.roomName || roomCode;
   audioDeviceSetting = applianceConfigState.audioDevice;
   audioEnabled = applianceConfigState.enabled;
+  roomActive = applianceConfigState.roomActive;
   writeApplianceConfig();
 };
 
@@ -519,9 +550,60 @@ const changeRoomCode = async (nextRoomCode) => {
   emitStatus();
 };
 
+const changeRoomName = async (nextRoomName) => {
+  const cleanRoomName = String(nextRoomName || "").trim();
+
+  if (!cleanRoomName || cleanRoomName === roomName) return;
+
+  applyConfig({ roomName: cleanRoomName });
+
+  if (roomActive) {
+    await ensureRoomRegistered();
+  }
+
+  emitStatus();
+};
+
+const activateRoomCommand = async ({ roomCode: nextRoomCode, roomName: nextRoomName } = {}) => {
+  const updates = { roomActive: true };
+
+  if (nextRoomCode) {
+    updates.roomCode = sanitizeRoomCode(nextRoomCode);
+  }
+
+  if (nextRoomName) {
+    updates.roomName = String(nextRoomName).trim();
+  }
+
+  applyConfig(updates);
+  applianceAutoRestart();
+
+  if (audioEnabled) {
+    startCapture();
+  }
+
+  await ensureRoomRegistered();
+  emitStatus();
+};
+
+const deactivateRoomCommand = async () => {
+  applyConfig({ roomActive: false, enabled: false });
+  stopCapture();
+  roomRegistered = false;
+
+  try {
+    await postJson(applianceRoomPath("stop"), {});
+  } catch (error) {
+    console.error("Room deactivate update failed:", error.message);
+  }
+
+  emitStatus();
+};
+
 const startAudioCommand = async () => {
-  applyConfig({ enabled: true });
+  applyConfig({ enabled: true, roomActive: true });
   audioEnabled = true;
+  roomActive = true;
   startCapture();
   await ensureRoomRegistered();
   emitStatus();
@@ -531,13 +613,6 @@ const stopAudioCommand = async () => {
   applyConfig({ enabled: false });
   audioEnabled = false;
   stopCapture();
-  roomRegistered = false;
-
-  try {
-    await postJson(applianceRoomPath("stop"), {});
-  } catch (error) {
-    console.error("Audio stop room update failed:", error.message);
-  }
 
   emitStatus();
 };
@@ -565,13 +640,32 @@ const connectCommandSocket = () => {
     commandSocket.emit("appliance:register", getStatusPayload());
   });
 
-  commandSocket.on("appliance:set-room-code", async ({ roomCode: nextRoomCode }) => {
+  const handleSetRoomCode = async ({ roomCode: nextRoomCode } = {}) => {
     await changeRoomCode(nextRoomCode);
-  });
+  };
+
+  const handleSetRoomName = async ({ roomName: nextRoomName } = {}) => {
+    await changeRoomName(nextRoomName);
+  };
+
+  commandSocket.on("appliance:set-room-code", handleSetRoomCode);
+  commandSocket.on("set-room-code", handleSetRoomCode);
+  commandSocket.on("appliance:set-room-name", handleSetRoomName);
+  commandSocket.on("set-room-name", handleSetRoomName);
 
   commandSocket.on("appliance:start-audio", startAudioCommand);
+  commandSocket.on("start-audio", startAudioCommand);
   commandSocket.on("appliance:stop-audio", stopAudioCommand);
+  commandSocket.on("stop-audio", stopAudioCommand);
+  commandSocket.on("appliance:activate-room", activateRoomCommand);
+  commandSocket.on("activate-room", activateRoomCommand);
+  commandSocket.on("appliance:deactivate-room", deactivateRoomCommand);
+  commandSocket.on("deactivate-room", deactivateRoomCommand);
   commandSocket.on("appliance:restart", () => {
+    console.log("Restart command received.");
+    process.exit(1);
+  });
+  commandSocket.on("restart", () => {
     console.log("Restart command received.");
     process.exit(1);
   });
@@ -581,6 +675,8 @@ const main = async () => {
   console.log(`Pi host server URL: ${SERVER_URL}`);
   console.log(`Pi host appliance ID: ${applianceId}`);
   console.log(`Pi host room code: ${roomCode}`);
+  console.log(`Pi host room name: ${roomName}`);
+  console.log(`Pi host pairing code: ${pairingCode}`);
   console.log(`Pi host audio device setting: ${audioDeviceSetting}`);
   console.log(`Start endpoint: ${applianceRoomPath("start")}`);
   console.log(`Heartbeat endpoint: ${applianceRoomPath("heartbeat")}`);
@@ -588,13 +684,15 @@ const main = async () => {
 
   connectCommandSocket();
 
-  if (audioEnabled) {
+  if (roomActive && audioEnabled) {
     startCapture();
+  } else if (!roomActive) {
+    console.log("Room is inactive by appliance config.");
   } else {
     console.log("Audio capture is disabled by appliance config.");
   }
 
-  if (audioEnabled && !(await ensureRoomRegistered())) {
+  if (roomActive && audioEnabled && !(await ensureRoomRegistered())) {
     scheduleRetry();
   }
 
