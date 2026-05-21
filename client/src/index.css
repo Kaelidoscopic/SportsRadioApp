@@ -48,6 +48,10 @@ select:disabled {
   max-width: 560px;
 }
 
+.host-menu-card {
+  max-width: 780px;
+}
+
 .listener-card {
   max-width: 520px;
 }
@@ -177,6 +181,73 @@ select:disabled {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
+}
+
+.managed-host-panel {
+  width: 100%;
+  margin-bottom: 1rem;
+}
+
+.section-heading-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+}
+
+.section-title {
+  margin: 0.15rem 0 0;
+  color: #f3f4f6;
+  font-size: 1.15rem;
+}
+
+.compact-banner {
+  margin-bottom: 0.85rem;
+}
+
+.inline-control-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  margin: 0.85rem 0;
+}
+
+.inline-control-row .secondary-button {
+  width: auto;
+  min-width: 112px;
+}
+
+.box-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.box-card {
+  background: #151922;
+  border: 1px solid #2a3140;
+  border-radius: 14px;
+  padding: 1rem;
+}
+
+.host-mode-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: #8f9bad;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.host-mode-divider::before,
+.host-mode-divider::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: #2d3442;
 }
 
 .metric-card {
@@ -432,9 +503,17 @@ select:disabled {
 }
 
 .room-list-code {
+  display: block;
   font-size: 1.1rem;
   font-weight: 700;
   letter-spacing: 0.08rem;
+}
+
+.room-list-name {
+  display: block;
+  color: #8f9bad;
+  font-size: 0.82rem;
+  margin-top: 0.15rem;
 }
 
 .scanner-overlay {
@@ -485,8 +564,13 @@ audio {
   .share-actions,
   .status-grid,
   .admin-metrics,
+  .inline-control-row,
   .qr-join-card {
     grid-template-columns: 1fr;
+  }
+
+  .inline-control-row .secondary-button {
+    width: 100%;
   }
 
   .qr-join-card {

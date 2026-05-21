@@ -31,7 +31,10 @@ Each Pi should have a stable appliance ID:
 ```env
 SPORTSYNC_SERVER_URL=https://sportsradioapp.onrender.com
 SPORTSYNC_APPLIANCE_ID=HOUSE_BOX_1
+SPORTSYNC_APPLIANCE_NAME=House Box 1
+SPORTSYNC_PAIRING_CODE=HOUSE-5235
 SPORTSYNC_ROOM_CODE=HOME
+SPORTSYNC_ROOM_NAME=Home Audio
 SPORTSYNC_AUDIO_DEVICE=auto
 ```
 
@@ -57,9 +60,13 @@ Example:
 ```json
 {
   "applianceId": "HOUSE_BOX_1",
+  "displayName": "House Box 1",
+  "pairingCode": "HOUSE-5235",
   "roomCode": "HOME",
+  "roomName": "Home Audio",
   "audioDevice": "auto",
-  "enabled": true
+  "enabled": true,
+  "roomActive": true
 }
 ```
 

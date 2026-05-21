@@ -25,6 +25,7 @@ Key appliance docs:
 - [Wiring diagram](docs/wiring-diagram.md)
 - [Pi production setup](docs/pi-production-setup.md)
 - [Appliance admin control](docs/appliance-admin-control.md)
+- [Appliance account linking](docs/appliance-account-linking.md)
 - [Physical TV test checklist](docs/physical-tv-test-checklist.md)
 - [Known limitations](docs/known-limitations.md)
 - [MVP v1 release notes](docs/mvp-v1-release-notes.md)
@@ -59,7 +60,10 @@ Example local Pi env:
 ```env
 SPORTSYNC_SERVER_URL=http://10.0.0.138:5000
 SPORTSYNC_APPLIANCE_ID=HOUSE_BOX_1
+SPORTSYNC_APPLIANCE_NAME=House Box 1
+SPORTSYNC_PAIRING_CODE=HOUSE-5235
 SPORTSYNC_ROOM_CODE=HOME
+SPORTSYNC_ROOM_NAME=Home Audio
 SPORTSYNC_AUDIO_DEVICE=auto
 ```
 
@@ -92,7 +96,10 @@ Pi production env:
 ```env
 SPORTSYNC_SERVER_URL=https://sportsradioapp.onrender.com
 SPORTSYNC_APPLIANCE_ID=HOUSE_BOX_1
+SPORTSYNC_APPLIANCE_NAME=House Box 1
+SPORTSYNC_PAIRING_CODE=HOUSE-5235
 SPORTSYNC_ROOM_CODE=HOME
+SPORTSYNC_ROOM_NAME=Home Audio
 SPORTSYNC_AUDIO_DEVICE=auto
 ```
 

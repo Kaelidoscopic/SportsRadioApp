@@ -1,5 +1,6 @@
 import { useState } from "react";
 import QRScanner from "./QRScanner";
+import BoxHostPanel from "./BoxHostPanel";
 
 function LandingPage({
   roomId,
@@ -73,7 +74,7 @@ function LandingPage({
   if (activeMode === "host") {
     return (
       <div className="page-shell">
-        <div className="main-card landing-card compact-landing">
+        <div className="main-card landing-card host-menu-card">
           <button className="back-button" onClick={() => setMode("menu")}>
             ← Back
           </button>
@@ -98,6 +99,12 @@ function LandingPage({
           </div>
 
           <div className="compact-actions">
+            <BoxHostPanel isSocketConnected={isSocketConnected} />
+
+            <div className="host-mode-divider">
+              <span>Browser host mode</span>
+            </div>
+
             <input
               className="room-input compact-input"
               type="text"
@@ -193,7 +200,12 @@ function LandingPage({
                   className="room-list-card"
                   onClick={() => joinRoom(room.roomId)}
                 >
-                  <span className="room-list-code">{room.roomId}</span>
+                  <span>
+                    <span className="room-list-code">{room.roomId}</span>
+                    {room.roomName && room.roomName !== room.roomId && (
+                      <span className="room-list-name">{room.roomName}</span>
+                    )}
+                  </span>
 
                   <span
                     className={`mini-pill ${
