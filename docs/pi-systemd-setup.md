@@ -9,7 +9,7 @@ From Windows PowerShell, run this from the repository root:
 ```powershell
 ssh kael@sportsyncpi.local "mkdir -p /home/kael/sports-sync-pi"
 scp server/package.json server/package-lock.json server/pi-host.js server/.env.pi.example kael@sportsyncpi.local:/home/kael/sports-sync-pi/
-ssh kael@sportsyncpi.local "cd /home/kael/sports-sync-pi && npm ci --omit=dev"
+ssh kael@sportsyncpi.local "cd /home/kael/sports-sync-pi && npm install --omit=dev --prefix server"
 ```
 
 ## 2. Create The Pi Environment File
@@ -53,7 +53,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-WorkingDirectory=/home/kael/sports-sync-pi
+WorkingDirectory=/home/kael/sports-sync-pi/server
 ExecStart=/usr/bin/npm run pi-host
 Restart=always
 RestartSec=5

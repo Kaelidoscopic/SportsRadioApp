@@ -26,6 +26,7 @@ Key appliance docs:
 - [Pi production setup](docs/pi-production-setup.md)
 - [Appliance admin control](docs/appliance-admin-control.md)
 - [Appliance account linking](docs/appliance-account-linking.md)
+- [Pi update workflow](docs/pi-update-workflow.md)
 - [Physical TV test checklist](docs/physical-tv-test-checklist.md)
 - [Known limitations](docs/known-limitations.md)
 - [MVP v1 release notes](docs/mvp-v1-release-notes.md)
@@ -71,7 +72,7 @@ Run the Pi host manually during testing:
 
 ```bash
 cd /home/kael/sports-sync-pi
-npm run pi-host
+npm --prefix server run pi-host
 ```
 
 For installed Pi appliances, use systemd:
@@ -113,7 +114,7 @@ Production flow:
 
 1. Deploy the backend.
 2. Configure and deploy the frontend with the production backend URL.
-3. Copy `server/pi-host.js`, `server/package.json`, and `server/package-lock.json` to `/home/kael/sports-sync-pi` on the Pi.
+3. Clone the repository to `/home/kael/sports-sync-pi` on the Pi.
 4. Create `/home/kael/sports-sync-pi/.env` with the production Pi env values.
 5. Enable the `sports-sync-pi.service` systemd service.
 6. Confirm room `HOME` appears online and listener phones can hear appliance audio.

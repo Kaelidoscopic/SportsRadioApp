@@ -27,7 +27,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-WorkingDirectory=/home/kael/sports-sync-pi
+WorkingDirectory=/home/kael/sports-sync-pi/server
 ExecStart=/usr/bin/node /home/kael/sports-sync-pi/pi-host.js
 Restart=on-failure
 RestartSec=3
