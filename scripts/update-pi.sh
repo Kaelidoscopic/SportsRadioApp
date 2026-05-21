@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -e
 
 APP_DIR="/home/kael/sports-sync-pi"
+SERVER_DIR="$APP_DIR/server"
 SERVICE_NAME="sports-sync-pi"
+
+echo "Updating Sports Sync Pi appliance..."
+echo "Repo: $APP_DIR"
 
 cd "$APP_DIR"
 
@@ -12,13 +16,24 @@ if [ ! -d ".git" ]; then
   exit 1
 fi
 
+echo "Pulling latest changes from GitHub..."
 git pull origin main
 
-if [ -f "server/package.json" ]; then
-  npm install --omit=dev --prefix server
-else
-  npm install --omit=dev
+if [ ! -d "$SERVER_DIR" ]; then
+  echo "ERROR: Server directory not found at $SERVER_DIR."
+  exit 1
 fi
 
+echo "Installing server dependencies..."
+cd "$SERVER_DIR"
+npm install
+
+echo "Restarting $SERVICE_NAME..."
 sudo systemctl restart "$SERVICE_NAME"
+
+echo "Service status:"
 sudo systemctl status "$SERVICE_NAME" --no-pager
+
+echo "Update complete."
+echo "To watch logs, run:"
+echo "sudo journalctl -u $SERVICE_NAME -f"

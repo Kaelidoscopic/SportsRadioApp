@@ -46,7 +46,14 @@ sudo systemctl start sports-sync-pi.service
 ssh kael@sportsyncpi.local
 ```
 
-4. Run the updater:
+4. Make the updater executable once:
+
+```bash
+cd /home/kael/sports-sync-pi
+chmod +x scripts/update-pi.sh
+```
+
+5. Run the updater after future pushes:
 
 ```bash
 cd /home/kael/sports-sync-pi
@@ -57,9 +64,10 @@ The script will:
 
 - cd `/home/kael/sports-sync-pi`
 - pull `origin main`
-- install production server dependencies
+- install server dependencies from `/home/kael/sports-sync-pi/server`
 - restart `sports-sync-pi`
 - show service status
+- print the log command to run next
 
 ## Logs
 
@@ -75,3 +83,28 @@ Expected update result:
 - npm install completes
 - systemd restarts the service
 - Pi logs show the configured appliance id, room code, room name, and audio device detection
+
+## If `git pull` Asks For A GitHub Token
+
+If the repo is private or GitHub prompts for credentials, use one of these options:
+
+- Use a GitHub personal access token when prompted for the password.
+- Configure SSH deploy-key access and change the Pi remote to SSH:
+
+```bash
+cd /home/kael/sports-sync-pi
+git remote set-url origin git@github.com:Kaelidoscopic/SportsRadioApp.git
+```
+
+- If the repo is public, make sure the remote is HTTPS and does not include stale credentials:
+
+```bash
+cd /home/kael/sports-sync-pi
+git remote set-url origin https://github.com/Kaelidoscopic/SportsRadioApp.git
+```
+
+After fixing credentials, rerun:
+
+```bash
+./scripts/update-pi.sh
+```
