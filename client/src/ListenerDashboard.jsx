@@ -2,10 +2,13 @@ function ListenerDashboard({
   currentRoom,
   isListening,
   isHostLive,
+  hostType = "browser",
   leaveRoom,
   startListening,
   stopListening,
   reconnectAudio,
+  resumeApplianceAudio,
+  needsUserAudioGesture = false,
   remoteAudioRef,
   statusMessage,
   isSocketConnected
@@ -44,6 +47,10 @@ function ListenerDashboard({
             {isListening ? "LIVE" : "PAUSED"}
           </div>
 
+          <div className="source-pill">
+            {hostType === "appliance" ? "Pi appliance" : "Browser host"}
+          </div>
+
           <button
             className="primary-button"
             onClick={handleListeningToggle}
@@ -51,6 +58,16 @@ function ListenerDashboard({
           >
             {isListening ? "Stop Listening" : "Start Listening"}
           </button>
+
+          {needsUserAudioGesture && hostType === "appliance" && (
+            <button
+              className="primary-button"
+              onClick={resumeApplianceAudio}
+              disabled={!isHostLive || !isSocketConnected}
+            >
+              Tap to Resume Audio
+            </button>
+          )}
 
           <button
             className="secondary-button"

@@ -231,7 +231,8 @@ select:disabled {
 
 .connection-pill,
 .live-pill,
-.mini-pill {
+.mini-pill,
+.source-pill {
   border-radius: 999px;
   font-weight: 700;
   white-space: nowrap;
@@ -253,6 +254,14 @@ select:disabled {
 .mini-pill {
   padding: 0.35rem 0.65rem;
   font-size: 0.75rem;
+}
+
+.source-pill {
+  background: #252b38;
+  border: 1px solid #3a4456;
+  color: #d7deea;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.8rem;
 }
 
 .live,

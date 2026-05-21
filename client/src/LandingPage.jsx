@@ -8,10 +8,12 @@ function LandingPage({
   joinRoom,
   activeRooms = [],
   statusMessage,
-  isSocketConnected
+  isSocketConnected,
+  preferredMode = null
 }) {
   const [mode, setMode] = useState(null);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const activeMode = mode || preferredMode;
 
   const savedHostCode = localStorage.getItem("venueAudioHostCode") || "";
 
@@ -68,11 +70,11 @@ function LandingPage({
     }, 0);
   };
 
-  if (mode === "host") {
+  if (activeMode === "host") {
     return (
       <div className="page-shell">
         <div className="main-card landing-card compact-landing">
-          <button className="back-button" onClick={() => setMode(null)}>
+          <button className="back-button" onClick={() => setMode("menu")}>
             ← Back
           </button>
 
@@ -132,11 +134,11 @@ function LandingPage({
     );
   }
 
-  if (mode === "listener") {
+  if (activeMode === "listener") {
     return (
       <div className="page-shell">
         <div className="main-card landing-card compact-landing">
-          <button className="back-button" onClick={() => setMode(null)}>
+          <button className="back-button" onClick={() => setMode("menu")}>
             ← Back
           </button>
 
@@ -198,7 +200,11 @@ function LandingPage({
                       room.isBroadcasting ? "live" : "offline"
                     }`}
                   >
-                    {room.isBroadcasting ? "ONLINE" : "OFFLINE"}
+                    {room.hostType === "appliance"
+                      ? "PI"
+                      : room.isBroadcasting
+                        ? "ONLINE"
+                        : "OFFLINE"}
                   </span>
                 </button>
               ))}

@@ -17,6 +17,8 @@ const io = new Server(server, {
 });
 
 const rooms = {};
+const APPLIANCE_HOST_PREFIX = "appliance:";
+const APPLIANCE_OFFLINE_AFTER_MS = 10000;
 
 const getPublicRooms = () =>
   Object.entries(rooms)
@@ -24,7 +26,8 @@ const getPublicRooms = () =>
     .map(([roomId, room]) => ({
       roomId,
       isBroadcasting: room.isBroadcasting,
-      listenerCount: room.listeners.length
+      listenerCount: room.listeners.length,
+      hostType: room.hostType || "browser"
     }));
 
 const emitRoomsList = () => {
@@ -66,6 +69,110 @@ const sanitizeRoomCode = (code) => {
   return code.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
 };
 
+const createRoomState = ({
+  hostSocketId,
+  hostType = "browser",
+  isBroadcasting = false,
+  appliance = null
+}) => ({
+  hostSocketId,
+  hostType,
+  listeners: [],
+  isBroadcasting,
+  hostDisconnectTimer: null,
+  appliance
+});
+
+const updateApplianceRoom = (roomId, appliance = {}) => {
+  const existingRoom = rooms[roomId];
+  const nextApplianceState = {
+    sampleRate: Number(appliance.sampleRate) || 44100,
+    channels: Number(appliance.channels) || 2,
+    encoding: appliance.encoding || "pcm_s16le",
+    label: appliance.label || "Pi audio appliance",
+    lastSeen: Date.now()
+  };
+
+  if (existingRoom) {
+    if (
+      existingRoom.hostSocketId &&
+      existingRoom.hostType !== "appliance"
+    ) {
+      return {
+        error: "Room already exists with a browser host."
+      };
+    }
+
+    existingRoom.hostSocketId = `${APPLIANCE_HOST_PREFIX}${roomId}`;
+    existingRoom.hostType = "appliance";
+    existingRoom.isBroadcasting = true;
+    existingRoom.appliance = {
+      ...existingRoom.appliance,
+      ...nextApplianceState
+    };
+
+    if (existingRoom.hostDisconnectTimer) {
+      clearTimeout(existingRoom.hostDisconnectTimer);
+      existingRoom.hostDisconnectTimer = null;
+    }
+  } else {
+    rooms[roomId] = createRoomState({
+      hostSocketId: `${APPLIANCE_HOST_PREFIX}${roomId}`,
+      hostType: "appliance",
+      isBroadcasting: true,
+      appliance: nextApplianceState
+    });
+  }
+
+  const room = rooms[roomId];
+  const members = [room.hostSocketId, ...room.listeners];
+
+  io.to(roomId).emit("room-updated", { roomId, members });
+  io.to(roomId).emit("broadcast-status", {
+    isBroadcasting: true,
+    hostType: "appliance",
+    appliance: room.appliance
+  });
+
+  emitRoomsList();
+
+  return { room };
+};
+
+const markApplianceOffline = (roomId, reason = "Pi host is offline.") => {
+  const room = rooms[roomId];
+
+  if (!room || room.hostType !== "appliance") return;
+
+  room.hostSocketId = null;
+  room.isBroadcasting = false;
+
+  io.to(roomId).emit("broadcast-status", {
+    isBroadcasting: false,
+    hostType: "appliance"
+  });
+
+  console.log(`${roomId}: ${reason}`);
+  emitRoomsList();
+};
+
+setInterval(() => {
+  const now = Date.now();
+
+  for (const roomId in rooms) {
+    const room = rooms[roomId];
+
+    if (
+      room.hostType === "appliance" &&
+      room.hostSocketId &&
+      room.appliance?.lastSeen &&
+      now - room.appliance.lastSeen > APPLIANCE_OFFLINE_AFTER_MS
+    ) {
+      markApplianceOffline(roomId, "Pi host heartbeat expired.");
+    }
+  }
+}, 5000);
+
 io.on("connection", (socket) => {
   console.log(`User connected: ${socket.id}`);
 
@@ -89,6 +196,8 @@ io.on("connection", (socket) => {
         }
 
         existingRoom.hostSocketId = socket.id;
+        existingRoom.hostType = "browser";
+        existingRoom.appliance = null;
         socket.join(roomId);
 
         const members = [socket.id, ...existingRoom.listeners];
@@ -110,12 +219,9 @@ io.on("connection", (socket) => {
       return;
     }
 
-    rooms[roomId] = {
-      hostSocketId: socket.id,
-      listeners: [],
-      isBroadcasting: false,
-      hostDisconnectTimer: null
-    };
+    rooms[roomId] = createRoomState({
+      hostSocketId: socket.id
+    });
 
     socket.join(roomId);
 
@@ -157,12 +263,16 @@ io.on("connection", (socket) => {
       roomId,
       role: "listener",
       members,
-      isBroadcasting: room.isBroadcasting
+      isBroadcasting: room.isBroadcasting,
+      hostType: room.hostType || "browser",
+      appliance: room.appliance || null
     });
 
-    io.to(room.hostSocketId).emit("listener-joined", {
-      listenerSocketId: socket.id
-    });
+    if (room.hostType !== "appliance") {
+      io.to(room.hostSocketId).emit("listener-joined", {
+        listenerSocketId: socket.id
+      });
+    }
 
     console.log(`${socket.id} joined room ${roomId}`);
     emitRoomsList();
@@ -216,6 +326,14 @@ io.on("connection", (socket) => {
       if (room.listeners.includes(socket.id)) {
         if (!room.hostSocketId) {
           socket.emit("error-message", "Host is not connected.");
+          return;
+        }
+
+        if (room.hostType === "appliance") {
+          socket.emit("appliance-stream-ready", {
+            roomId,
+            appliance: room.appliance || null
+          });
           return;
         }
 
@@ -351,6 +469,8 @@ io.on("connection", (socket) => {
     }
 
     room.hostSocketId = socket.id;
+    room.hostType = "browser";
+    room.appliance = null;
     socket.join(roomId);
 
     const members = [room.hostSocketId, ...room.listeners];
@@ -367,6 +487,107 @@ io.on("connection", (socket) => {
     emitRoomsList();
   });
 });
+
+const requireApplianceToken = (req, res) => {
+  if (!process.env.PI_HOST_TOKEN) return true;
+
+  const token = req.get("x-pi-host-token");
+
+  if (token === process.env.PI_HOST_TOKEN) return true;
+
+  res.status(401).json({ error: "Invalid appliance token." });
+  return false;
+};
+
+app.post("/api/appliance/rooms/:roomCode/start", (req, res) => {
+  if (!requireApplianceToken(req, res)) return;
+
+  const roomId = sanitizeRoomCode(req.params.roomCode || "");
+
+  if (!roomId) {
+    res.status(400).json({ error: "Invalid room code." });
+    return;
+  }
+
+  const { room, error } = updateApplianceRoom(roomId, req.body || {});
+
+  if (error) {
+    res.status(409).json({ error });
+    return;
+  }
+
+  console.log(`Pi appliance host online: ${roomId}`);
+
+  res.json({
+    roomId,
+    isBroadcasting: room.isBroadcasting,
+    hostType: room.hostType,
+    listenerCount: room.listeners.length,
+    appliance: room.appliance
+  });
+});
+
+app.post("/api/appliance/rooms/:roomCode/heartbeat", (req, res) => {
+  if (!requireApplianceToken(req, res)) return;
+
+  const roomId = sanitizeRoomCode(req.params.roomCode || "");
+  const room = rooms[roomId];
+
+  if (!room || room.hostType !== "appliance") {
+    res.status(404).json({ error: "Appliance room not found." });
+    return;
+  }
+
+  updateApplianceRoom(roomId, req.body || room.appliance || {});
+
+  res.json({ ok: true, roomId });
+});
+
+app.post("/api/appliance/rooms/:roomCode/stop", (req, res) => {
+  if (!requireApplianceToken(req, res)) return;
+
+  const roomId = sanitizeRoomCode(req.params.roomCode || "");
+
+  markApplianceOffline(roomId, "Pi host stopped.");
+
+  res.json({ ok: true, roomId });
+});
+
+app.post(
+  "/api/appliance/rooms/:roomCode/audio",
+  express.raw({ type: "*/*", limit: "1mb" }),
+  (req, res) => {
+    if (!requireApplianceToken(req, res)) return;
+
+    const roomId = sanitizeRoomCode(req.params.roomCode || "");
+    const room = rooms[roomId];
+
+    if (!room || room.hostType !== "appliance" || !room.hostSocketId) {
+      res.status(404).json({ error: "Appliance room is not online." });
+      return;
+    }
+
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+      res.status(400).json({ error: "Audio payload is required." });
+      return;
+    }
+
+    room.appliance = {
+      ...(room.appliance || {}),
+      lastSeen: Date.now()
+    };
+
+    io.to(roomId).emit("appliance-audio-chunk", {
+      roomId,
+      sampleRate: room.appliance.sampleRate || 44100,
+      channels: room.appliance.channels || 2,
+      encoding: room.appliance.encoding || "pcm_s16le",
+      chunk: req.body
+    });
+
+    res.status(204).end();
+  }
+);
 
 app.get("/", (req, res) => {
   res.send("Server is running.");

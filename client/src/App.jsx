@@ -27,6 +27,12 @@ const rtcConfig = {
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
 };
 
+const getMediaDevices = () => navigator.mediaDevices || null;
+const mediaUnavailableMessage =
+  "Audio input capture requires HTTPS or localhost.";
+const savedListenerRoomKey = "venueAudioListenerRoomCode";
+const savedListenerWasListeningKey = "venueAudioListenerWasListening";
+
 function App() {
   const [roomId, setRoomId] = useState("");
   const [currentRoom, setCurrentRoom] = useState("");
@@ -40,6 +46,10 @@ function App() {
   const [isListening, setIsListening] = useState(false);
   const [userPausedListening, setUserPausedListening] = useState(false);
   const [isSocketConnected, setIsSocketConnected] = useState(socket.connected);
+  const [hostType, setHostType] = useState("browser");
+  const [applianceDetails, setApplianceDetails] = useState(null);
+  const [preferredLandingMode, setPreferredLandingMode] = useState(null);
+  const [needsUserAudioGesture, setNeedsUserAudioGesture] = useState(false);
 
   const [activeRooms, setActiveRooms] = useState([]);
   const [audioInputs, setAudioInputs] = useState([]);
@@ -56,10 +66,30 @@ function App() {
   const remoteAudioRef = useRef(null);
   const roleRef = useRef("");
   const currentRoomRef = useRef("");
+  const hostTypeRef = useRef("browser");
+  const isHostLiveRef = useRef(false);
+  const isListeningRef = useRef(false);
+  const userPausedListeningRef = useRef(false);
+  const shouldRestoreApplianceAudioRef = useRef(false);
+  const applianceDetailsRef = useRef(null);
+  const applianceRestoreInFlightRef = useRef(false);
+  const applianceAudioActiveRef = useRef(false);
+  const applianceListeningRef = useRef(false);
+  const applianceAudioListenerAttachedRef = useRef(false);
+  const applianceAudioChunkHandlerRef = useRef(null);
+  const applianceAudioAttachCountRef = useRef(0);
+  const applianceAudioDetachCountRef = useRef(0);
+  const applianceAutoStartAttemptedRef = useRef(false);
+  const applianceAudioRef = useRef({
+    context: null,
+    nextStartTime: 0
+  });
   const listenerPeerRef = useRef(null);
   const hostPeerConnectionsRef = useRef({});
   const linkJoinRoomRef = useRef("");
   const linkJoinRetryCountRef = useRef(0);
+  const roomRejoinTimerRef = useRef(null);
+  const pendingJoinRoomRef = useRef("");
 
   useEffect(() => {
     roleRef.current = role;
@@ -68,6 +98,26 @@ function App() {
   useEffect(() => {
     currentRoomRef.current = currentRoom;
   }, [currentRoom]);
+
+  useEffect(() => {
+    hostTypeRef.current = hostType;
+  }, [hostType]);
+
+  useEffect(() => {
+    isHostLiveRef.current = isHostLive;
+  }, [isHostLive]);
+
+  useEffect(() => {
+    isListeningRef.current = isListening;
+  }, [isListening]);
+
+  useEffect(() => {
+    userPausedListeningRef.current = userPausedListening;
+  }, [userPausedListening]);
+
+  useEffect(() => {
+    applianceDetailsRef.current = applianceDetails;
+  }, [applianceDetails]);
 
   useEffect(() => {
     localStorage.setItem("venueAudioSourceType", broadcastSourceType);
@@ -80,10 +130,18 @@ function App() {
   }, [selectedAudioInput]);
 
   const loadAudioInputs = async () => {
-    try {
-      await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mediaDevices = getMediaDevices();
 
-      const devices = await navigator.mediaDevices.enumerateDevices();
+    if (!mediaDevices) {
+      setAudioInputs([]);
+      setSelectedAudioInput("");
+      return;
+    }
+
+    try {
+      await mediaDevices.getUserMedia({ audio: true });
+
+      const devices = await mediaDevices.enumerateDevices();
       const audioDevices = devices.filter(
         (device) => device.kind === "audioinput"
       );
@@ -111,21 +169,31 @@ function App() {
   };
 
   const refreshAudioInputs = async () => {
+    if (!getMediaDevices()) {
+      setAudioInputs([]);
+      setSelectedAudioInput("");
+      setMessage(mediaUnavailableMessage);
+      return;
+    }
+
     await loadAudioInputs();
     setMessage("Audio devices refreshed.");
   };
 
   useEffect(() => {
     const loadTimer = setTimeout(loadAudioInputs, 0);
+    const mediaDevices = getMediaDevices();
 
-    navigator.mediaDevices.addEventListener("devicechange", loadAudioInputs);
+    if (mediaDevices?.addEventListener) {
+      mediaDevices.addEventListener("devicechange", loadAudioInputs);
+    }
 
     return () => {
       clearTimeout(loadTimer);
-      navigator.mediaDevices.removeEventListener(
-        "devicechange",
-        loadAudioInputs
-      );
+
+      if (mediaDevices?.removeEventListener) {
+        mediaDevices.removeEventListener("devicechange", loadAudioInputs);
+      }
     };
   }, []);
 
@@ -139,6 +207,259 @@ function App() {
     } catch (err) {
       console.log("Autoplay blocked.", err);
       setMessage("Tap Start Listening to begin audio.");
+    }
+  };
+
+  const getAudioChunkBytes = (chunk) => {
+    if (chunk instanceof ArrayBuffer) {
+      return new Uint8Array(chunk);
+    }
+
+    if (ArrayBuffer.isView(chunk)) {
+      return new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+    }
+
+    if (Array.isArray(chunk?.data)) {
+      return Uint8Array.from(chunk.data);
+    }
+
+    return null;
+  };
+
+  const getApplianceAudioContext = (sampleRate = 44100) => {
+    const existingContext = applianceAudioRef.current.context;
+
+    if (existingContext && existingContext.state !== "closed") {
+      return existingContext;
+    }
+
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    const context = new AudioContextClass({ sampleRate });
+
+    applianceAudioRef.current.context = context;
+    applianceAudioRef.current.nextStartTime = context.currentTime + 0.12;
+
+    return context;
+  };
+
+  const startApplianceAudio = async (sampleRate = 44100) => {
+    const context = getApplianceAudioContext(sampleRate);
+
+    try {
+      if (context.state === "suspended") {
+        await context.resume();
+        console.log("AudioContext resumed");
+      }
+    } catch (error) {
+      console.warn("AudioContext resume blocked:", error);
+      applianceListeningRef.current = false;
+      applianceAudioActiveRef.current = false;
+      setIsListening(false);
+      setNeedsUserAudioGesture(true);
+      setMessage("Tap to Resume Audio.");
+      throw error;
+    }
+
+    applianceListeningRef.current = true;
+    applianceAudioActiveRef.current = true;
+    shouldRestoreApplianceAudioRef.current = true;
+    applianceAutoStartAttemptedRef.current = true;
+    setNeedsUserAudioGesture(false);
+    applianceAudioRef.current.nextStartTime = context.currentTime + 0.12;
+    setIsListening(true);
+    setMessage("Listening to Pi audio.");
+
+    if (roleRef.current === "listener" && currentRoomRef.current) {
+      saveListenerSession(currentRoomRef.current, true);
+    }
+  };
+
+  const pauseApplianceAudio = async () => {
+    applianceListeningRef.current = false;
+    applianceAudioActiveRef.current = false;
+
+    const context = applianceAudioRef.current.context;
+
+    if (context && context.state === "running") {
+      await context.suspend();
+    }
+  };
+
+  const closeApplianceAudio = async () => {
+    applianceListeningRef.current = false;
+    applianceAudioActiveRef.current = false;
+
+    const context = applianceAudioRef.current.context;
+    applianceAudioRef.current.context = null;
+    applianceAudioRef.current.nextStartTime = 0;
+
+    if (context && context.state !== "closed") {
+      await context.close();
+    }
+  };
+
+  const isAppliancePipelineRunning = () => {
+    const context = applianceAudioRef.current.context;
+
+    return (
+      applianceAudioActiveRef.current &&
+      applianceListeningRef.current &&
+      context &&
+      context.state === "running"
+    );
+  };
+
+  const playApplianceAudioChunk = async ({
+    roomId,
+    sampleRate = 44100,
+    channels = 2,
+    chunk
+  }) => {
+    if (
+      roleRef.current !== "listener" ||
+      hostTypeRef.current !== "appliance" ||
+      currentRoomRef.current !== roomId ||
+      !applianceListeningRef.current
+    ) {
+      return;
+    }
+
+    const bytes = getAudioChunkBytes(chunk);
+    const channelCount = Math.max(Number(channels) || 1, 1);
+
+    if (!bytes || bytes.length < channelCount * 2) return;
+
+    const frameCount = Math.floor(bytes.length / 2 / channelCount);
+    const context = getApplianceAudioContext(sampleRate);
+
+    if (context.state === "suspended") {
+      await context.resume();
+    }
+
+    const audioBuffer = context.createBuffer(
+      channelCount,
+      frameCount,
+      sampleRate
+    );
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+
+    for (let frame = 0; frame < frameCount; frame += 1) {
+      for (let channel = 0; channel < channelCount; channel += 1) {
+        const sampleIndex = frame * channelCount + channel;
+        const sample = view.getInt16(sampleIndex * 2, true) / 32768;
+        audioBuffer.getChannelData(channel)[frame] = sample;
+      }
+    }
+
+    const source = context.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(context.destination);
+
+    const earliestStart = context.currentTime + 0.05;
+    const nextStartTime = applianceAudioRef.current.nextStartTime;
+    const startTime =
+      nextStartTime < earliestStart || nextStartTime - context.currentTime > 1
+        ? context.currentTime + 0.12
+        : nextStartTime;
+
+    source.start(startTime);
+    applianceAudioRef.current.nextStartTime =
+      startTime + audioBuffer.duration;
+  };
+
+  const attachApplianceAudioListener = () => {
+    if (!applianceAudioChunkHandlerRef.current) {
+      applianceAudioChunkHandlerRef.current = (payload) => {
+        playApplianceAudioChunk(payload);
+      };
+    }
+
+    if (applianceAudioChunkHandlerRef.current) {
+      socket.off("appliance-audio-chunk", applianceAudioChunkHandlerRef.current);
+      if (applianceAudioListenerAttachedRef.current) {
+        applianceAudioDetachCountRef.current += 1;
+        console.log(
+          `Appliance audio listener detached (${applianceAudioDetachCountRef.current})`
+        );
+      }
+      applianceAudioListenerAttachedRef.current = false;
+    }
+
+    socket.on("appliance-audio-chunk", applianceAudioChunkHandlerRef.current);
+    applianceAudioListenerAttachedRef.current = true;
+    applianceAudioAttachCountRef.current += 1;
+    console.log(
+      `Appliance audio listener attached (${applianceAudioAttachCountRef.current})`
+    );
+  };
+
+  const detachApplianceAudioListener = () => {
+    if (
+      !applianceAudioChunkHandlerRef.current ||
+      !applianceAudioListenerAttachedRef.current
+    ) {
+      return;
+    }
+
+    socket.off("appliance-audio-chunk", applianceAudioChunkHandlerRef.current);
+    applianceAudioListenerAttachedRef.current = false;
+    applianceAudioDetachCountRef.current += 1;
+    console.log(
+      `Appliance audio listener detached (${applianceAudioDetachCountRef.current})`
+    );
+  };
+
+  const resetApplianceAudioPipeline = async () => {
+    detachApplianceAudioListener();
+    await closeApplianceAudio();
+    applianceAudioRef.current.nextStartTime = 0;
+  };
+
+  const restartRestoredApplianceAudio = async ({
+    resetPipeline = false,
+    requestStream = false,
+    allowUserGesturePrompt = true
+  } = {}) => {
+    if (
+      roleRef.current !== "listener" ||
+      hostTypeRef.current !== "appliance" ||
+      !currentRoomRef.current ||
+      !socket.connected ||
+      userPausedListeningRef.current ||
+      !shouldRestoreApplianceAudioRef.current ||
+      applianceRestoreInFlightRef.current
+    ) {
+      return;
+    }
+
+    if (!resetPipeline && isAppliancePipelineRunning()) {
+      return;
+    }
+
+    applianceRestoreInFlightRef.current = true;
+    console.log("Restored room, restarting appliance audio");
+
+    try {
+      if (resetPipeline) {
+        await resetApplianceAudioPipeline();
+      }
+
+      attachApplianceAudioListener();
+      await startApplianceAudio(
+        applianceDetailsRef.current?.sampleRate || 44100
+      );
+
+      if (requestStream) {
+        socket.emit("request-stream");
+      }
+    } catch (error) {
+      console.error("Failed to restart restored appliance audio:", error);
+      if (allowUserGesturePrompt) {
+        setNeedsUserAudioGesture(true);
+        setMessage("Tap to Resume Audio.");
+      }
+    } finally {
+      applianceRestoreInFlightRef.current = false;
     }
   };
 
@@ -227,19 +548,60 @@ function App() {
   const cleanupAllConnections = () => {
     cleanupHostConnections();
     cleanupListenerConnection();
+    closeApplianceAudio();
   };
 
   const resetRoomState = () => {
     currentRoomRef.current = "";
     roleRef.current = "";
+    hostTypeRef.current = "browser";
+    userPausedListeningRef.current = false;
+    shouldRestoreApplianceAudioRef.current = false;
+    applianceDetailsRef.current = null;
+    applianceRestoreInFlightRef.current = false;
+    applianceAudioActiveRef.current = false;
+    applianceAutoStartAttemptedRef.current = false;
+    setNeedsUserAudioGesture(false);
     setCurrentRoom("");
     setRole("");
+    setPreferredLandingMode(null);
     setMembers([]);
     setIsBroadcasting(false);
     setIsHostLive(false);
+    setHostType("browser");
+    setApplianceDetails(null);
     setIsMuted(false);
     setIsListening(false);
     setUserPausedListening(false);
+  };
+
+  const saveListenerSession = (roomCode, wasListening = false) => {
+    localStorage.setItem(savedListenerRoomKey, roomCode);
+    localStorage.setItem(
+      savedListenerWasListeningKey,
+      wasListening ? "true" : "false"
+    );
+  };
+
+  const clearSavedListenerSession = () => {
+    localStorage.removeItem(savedListenerRoomKey);
+    localStorage.removeItem(savedListenerWasListeningKey);
+    pendingJoinRoomRef.current = "";
+  };
+
+  const requestJoinRoom = (roomCode) => {
+    const cleanRoomCode = String(roomCode || "").trim().toUpperCase();
+
+    if (!cleanRoomCode) return;
+
+    setRoomId(cleanRoomCode);
+
+    if (socket.connected) {
+      socket.emit("join-room", cleanRoomCode);
+      return;
+    }
+
+    pendingJoinRoomRef.current = cleanRoomCode;
   };
 
   const stopBroadcastTracksOnly = () => {
@@ -294,30 +656,99 @@ function App() {
     }
   };
 
+  const clearRoomRejoinTimer = () => {
+    if (roomRejoinTimerRef.current) {
+      clearTimeout(roomRejoinTimerRef.current);
+      roomRejoinTimerRef.current = null;
+    }
+  };
+
+  const scheduleRoomRejoin = (delay = 1500) => {
+    if (
+      roomRejoinTimerRef.current ||
+      roleRef.current !== "listener" ||
+      !currentRoomRef.current
+    ) {
+      return;
+    }
+
+    roomRejoinTimerRef.current = setTimeout(() => {
+      roomRejoinTimerRef.current = null;
+
+      if (
+        roleRef.current === "listener" &&
+        currentRoomRef.current &&
+        socket.connected
+      ) {
+        socket.emit("join-room", currentRoomRef.current);
+      }
+    }, delay);
+  };
+
+  const restoreApplianceRoomState = () => {
+    if (
+      roleRef.current !== "listener" ||
+      hostTypeRef.current !== "appliance" ||
+      !currentRoomRef.current ||
+      !socket.connected
+    ) {
+      return;
+    }
+
+    console.log("Restoring appliance room state");
+    socket.emit("join-room", currentRoomRef.current);
+  };
+
   useEffect(() => {
     socket.on("room-created", (data) => {
       currentRoomRef.current = data.roomId;
       roleRef.current = data.role;
+      hostTypeRef.current = "browser";
       setCurrentRoom(data.roomId);
       setRoomId(data.roomId);
       setRole(data.role);
+      setPreferredLandingMode(null);
       setMembers(data.members);
+      setHostType("browser");
+      setApplianceDetails(null);
       setMessage(`Room ${data.roomId} created.`);
 
       localStorage.setItem("venueAudioHostCode", data.roomId);
     });
 
     socket.on("joined-room", (data) => {
+      clearRoomRejoinTimer();
+      pendingJoinRoomRef.current = "";
       linkJoinRoomRef.current = "";
       linkJoinRetryCountRef.current = 0;
       currentRoomRef.current = data.roomId;
       roleRef.current = data.role;
       setCurrentRoom(data.roomId);
       setRole(data.role);
+      setPreferredLandingMode(null);
       setMembers(data.members);
       setIsHostLive(Boolean(data.isBroadcasting));
-      setUserPausedListening(false);
+      isHostLiveRef.current = Boolean(data.isBroadcasting);
+      hostTypeRef.current = data.hostType || "browser";
+      setHostType(data.hostType || "browser");
+      applianceDetailsRef.current = data.appliance || null;
+      setApplianceDetails(data.appliance || null);
+      setUserPausedListening(
+        data.hostType === "appliance" &&
+          userPausedListeningRef.current &&
+          !shouldRestoreApplianceAudioRef.current
+      );
       setMessage(`Connected to room ${data.roomId}.`);
+      saveListenerSession(data.roomId, shouldRestoreApplianceAudioRef.current);
+
+      if (
+        data.hostType === "appliance" &&
+        data.isBroadcasting &&
+        shouldRestoreApplianceAudioRef.current &&
+        !applianceAutoStartAttemptedRef.current
+      ) {
+        restartRestoredApplianceAudio({ requestStream: true });
+      }
     });
 
     socket.on("room-updated", (data) => {
@@ -325,31 +756,66 @@ function App() {
     });
 
     socket.on("broadcast-status", (data) => {
+      const wasHostLive = isHostLiveRef.current;
+
       setIsHostLive(data.isBroadcasting);
+      isHostLiveRef.current = data.isBroadcasting;
+
+      if (data.hostType) {
+        hostTypeRef.current = data.hostType;
+        setHostType(data.hostType);
+      }
+
+      if (data.appliance) {
+        applianceDetailsRef.current = data.appliance;
+        setApplianceDetails(data.appliance);
+      }
 
       if (!data.isBroadcasting) {
         setIsListening(false);
-        setUserPausedListening(false);
+        pauseApplianceAudio();
+      }
+
+      if (
+        data.hostType === "appliance" &&
+        data.isBroadcasting &&
+        !wasHostLive &&
+        shouldRestoreApplianceAudioRef.current &&
+        !applianceAutoStartAttemptedRef.current
+      ) {
+        restartRestoredApplianceAudio({ requestStream: true });
       }
     });
 
     socket.on("room-closed", (msg) => {
+      clearRoomRejoinTimer();
       cleanupAllConnections();
       stopBroadcastTracksOnly();
       localStorage.removeItem("venueAudioHostMode");
+      clearSavedListenerSession();
       resetRoomState();
       setMessage(msg);
     });
 
     socket.on("left-room", (msg) => {
+      clearRoomRejoinTimer();
       cleanupAllConnections();
       stopBroadcastTracksOnly();
+      clearSavedListenerSession();
       resetRoomState();
       setMessage(msg);
     });
 
-    socket.on("connect", () => {
+    socket.on("connect", async () => {
       setIsSocketConnected(true);
+
+      if (pendingJoinRoomRef.current && !roleRef.current) {
+        const roomToJoin = pendingJoinRoomRef.current;
+        pendingJoinRoomRef.current = "";
+        socket.emit("join-room", roomToJoin);
+        setMessage(`Reconnecting to room ${roomToJoin}...`);
+        return;
+      }
 
       if (roleRef.current === "host" && currentRoomRef.current) {
         socket.emit("recover-host-room", currentRoomRef.current);
@@ -357,6 +823,20 @@ function App() {
       }
 
       if (roleRef.current === "listener" && currentRoomRef.current) {
+        if (hostTypeRef.current === "appliance") {
+          console.log("Mobile/server reconnect detected");
+
+          if (isListeningRef.current || applianceListeningRef.current) {
+            shouldRestoreApplianceAudioRef.current = true;
+          }
+
+          await pauseApplianceAudio();
+          setIsListening(false);
+          restoreApplianceRoomState();
+          setMessage("Reconnected. Waiting for Pi audio...");
+          return;
+        }
+
         socket.emit("join-room", currentRoomRef.current);
         setMessage("Reconnected to room.");
       }
@@ -364,6 +844,16 @@ function App() {
 
     socket.on("disconnect", () => {
       setIsSocketConnected(false);
+
+      if (roleRef.current === "listener" && hostTypeRef.current === "appliance") {
+        if (isListeningRef.current || applianceListeningRef.current) {
+          shouldRestoreApplianceAudioRef.current = true;
+        }
+
+        pauseApplianceAudio();
+        setIsListening(false);
+      }
+
       setMessage("Connection lost. Trying to reconnect...");
     });
 
@@ -373,7 +863,27 @@ function App() {
     });
 
     socket.on("error-message", (msg) => {
-      if (msg === "Room not found." && linkJoinRoomRef.current) {
+      const shouldRetryCurrentApplianceRoom =
+        roleRef.current === "listener" &&
+        currentRoomRef.current &&
+        hostTypeRef.current === "appliance" &&
+        (msg === "Room not found." ||
+          msg === "Host is reconnecting. Try again in a moment." ||
+          msg === "You must be in a room to request audio.");
+
+      if (shouldRetryCurrentApplianceRoom) {
+        setIsListening(false);
+        setIsHostLive(false);
+        setMessage("Waiting for the Pi room to come back online...");
+        scheduleRoomRejoin();
+        return;
+      }
+
+      if (
+        (msg === "Room not found." ||
+          msg === "Host is reconnecting. Try again in a moment.") &&
+        linkJoinRoomRef.current
+      ) {
         if (linkJoinRetryCountRef.current < 4) {
           linkJoinRetryCountRef.current += 1;
           setMessage("Looking for the room...");
@@ -389,7 +899,10 @@ function App() {
 
         linkJoinRoomRef.current = "";
         linkJoinRetryCountRef.current = 0;
-        setMessage("Room is not available yet. Ask the host to confirm the code.");
+        setMessage(
+          "Saved room is not online yet. Start the Pi host or tap Join Audio to try again."
+        );
+        setPreferredLandingMode("listener");
         return;
       }
 
@@ -483,6 +996,25 @@ function App() {
       setActiveRooms(rooms);
     });
 
+    socket.on("appliance-stream-ready", ({ appliance }) => {
+      if (hostTypeRef.current !== "appliance") return;
+
+      applianceDetailsRef.current = appliance || null;
+      setApplianceDetails(appliance || null);
+      setIsHostLive(true);
+      isHostLiveRef.current = true;
+
+      if (
+        shouldRestoreApplianceAudioRef.current &&
+        !userPausedListeningRef.current &&
+        !applianceAutoStartAttemptedRef.current
+      ) {
+        restartRestoredApplianceAudio();
+      }
+
+      setMessage("Pi audio stream is ready.");
+    });
+
     socket.emit("get-rooms");
 
     return () => {
@@ -499,9 +1031,12 @@ function App() {
       socket.off("webrtc-answer");
       socket.off("webrtc-ice-candidate");
       socket.off("rooms-list");
+      socket.off("appliance-stream-ready");
+      detachApplianceAudioListener();
       socket.off("connect");
       socket.off("disconnect");
       socket.off("connect_error");
+      clearRoomRejoinTimer();
     };
   }, []);
 
@@ -537,8 +1072,10 @@ function App() {
   const leaveRoom = () => {
     const leavingAsHost = roleRef.current === "host";
 
+    clearRoomRejoinTimer();
     cleanupAllConnections();
     stopBroadcastTracksOnly();
+    clearSavedListenerSession();
 
     if (leavingAsHost) {
       localStorage.removeItem("venueAudioHostMode");
@@ -561,9 +1098,20 @@ function App() {
 
     try {
       let stream;
+      const mediaDevices = getMediaDevices();
+
+      if (!mediaDevices) {
+        setMessage(mediaUnavailableMessage);
+        return;
+      }
 
       if (broadcastSourceType === "tab") {
-        const displayStream = await navigator.mediaDevices.getDisplayMedia({
+        if (!mediaDevices.getDisplayMedia) {
+          setMessage(mediaUnavailableMessage);
+          return;
+        }
+
+        const displayStream = await mediaDevices.getDisplayMedia({
           video: true,
           audio: true
         });
@@ -581,7 +1129,7 @@ function App() {
         stream = new MediaStream(audioTracks);
         displayStream.getVideoTracks().forEach((track) => track.stop());
       } else {
-        stream = await navigator.mediaDevices.getUserMedia({
+        stream = await mediaDevices.getUserMedia({
           audio: {
             deviceId: selectedAudioInput
               ? { exact: selectedAudioInput }
@@ -671,6 +1219,19 @@ function App() {
     }
 
     setUserPausedListening(false);
+    shouldRestoreApplianceAudioRef.current = true;
+
+    if (currentRoomRef.current) {
+      saveListenerSession(currentRoomRef.current, true);
+    }
+
+    if (hostTypeRef.current === "appliance") {
+      applianceAutoStartAttemptedRef.current = true;
+      attachApplianceAudioListener();
+      await startApplianceAudio(applianceDetails?.sampleRate || 44100);
+      socket.emit("request-stream");
+      return;
+    }
 
     const listenerConnectionState = listenerPeerRef.current?.connectionState;
     const hasActiveRemoteStream =
@@ -697,6 +1258,20 @@ function App() {
     if (roleRef.current !== "listener") return;
 
     setUserPausedListening(true);
+    shouldRestoreApplianceAudioRef.current = false;
+
+    if (currentRoomRef.current) {
+      saveListenerSession(currentRoomRef.current, false);
+    }
+
+    if (hostTypeRef.current === "appliance") {
+      pauseApplianceAudio();
+      applianceAutoStartAttemptedRef.current = false;
+      setNeedsUserAudioGesture(false);
+      setIsListening(false);
+      setMessage("Listening paused.");
+      return;
+    }
 
     if (remoteAudioRef.current) {
       remoteAudioRef.current.pause();
@@ -706,7 +1281,7 @@ function App() {
     setMessage("Listening paused.");
   };
 
-  const reconnectAudio = () => {
+  const reconnectAudio = async () => {
     if (roleRef.current !== "listener") return;
 
     if (!isSocketConnected) {
@@ -715,6 +1290,7 @@ function App() {
     }
 
     cleanupListenerConnection();
+    pauseApplianceAudio();
     setUserPausedListening(false);
     setIsListening(false);
 
@@ -723,13 +1299,51 @@ function App() {
       return;
     }
 
+    if (hostTypeRef.current === "appliance") {
+      shouldRestoreApplianceAudioRef.current = true;
+      if (currentRoomRef.current) {
+        saveListenerSession(currentRoomRef.current, true);
+      }
+      applianceAutoStartAttemptedRef.current = false;
+      await restartRestoredApplianceAudio({
+        resetPipeline: true,
+        requestStream: true
+      });
+      setMessage("Reconnecting Pi audio...");
+      return;
+    }
+
     socket.emit("request-stream");
     setMessage("Reconnecting audio...");
+  };
+
+  const resumeApplianceAudioFromGesture = async () => {
+    if (roleRef.current !== "listener" || hostTypeRef.current !== "appliance") {
+      return;
+    }
+
+    shouldRestoreApplianceAudioRef.current = true;
+    applianceAutoStartAttemptedRef.current = false;
+    setNeedsUserAudioGesture(false);
+    setUserPausedListening(false);
+
+    if (currentRoomRef.current) {
+      saveListenerSession(currentRoomRef.current, true);
+    }
+
+    await restartRestoredApplianceAudio({
+      resetPipeline: true,
+      requestStream: true,
+      allowUserGesturePrompt: false
+    });
   };
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const roomFromUrl = params.get("room");
+    const savedListenerRoom = localStorage.getItem(savedListenerRoomKey);
+    const savedWasListening =
+      localStorage.getItem(savedListenerWasListeningKey) === "true";
 
     if (roomFromUrl) {
       const cleanRoomCode = roomFromUrl.trim();
@@ -737,9 +1351,30 @@ function App() {
       setTimeout(() => {
         linkJoinRoomRef.current = cleanRoomCode;
         linkJoinRetryCountRef.current = 0;
-        setRoomId(cleanRoomCode);
+        shouldRestoreApplianceAudioRef.current = savedWasListening;
+        applianceAutoStartAttemptedRef.current = false;
+        setNeedsUserAudioGesture(false);
+        setPreferredLandingMode("listener");
         setMessage(`Joining room ${cleanRoomCode}...`);
-        joinRoom(cleanRoomCode);
+        requestJoinRoom(cleanRoomCode);
+      }, 300);
+
+      return;
+    }
+
+    if (savedListenerRoom) {
+      const cleanRoomCode = savedListenerRoom.trim().toUpperCase();
+
+      setTimeout(() => {
+        linkJoinRoomRef.current = cleanRoomCode;
+        linkJoinRetryCountRef.current = 0;
+        shouldRestoreApplianceAudioRef.current = savedWasListening;
+        applianceAutoStartAttemptedRef.current = false;
+        setNeedsUserAudioGesture(false);
+        setUserPausedListening(!savedWasListening);
+        setPreferredLandingMode("listener");
+        setMessage(`Reconnecting to saved room ${cleanRoomCode}...`);
+        requestJoinRoom(cleanRoomCode);
       }, 300);
     }
   }, []);
@@ -751,9 +1386,22 @@ function App() {
       !isListening &&
       !userPausedListening
     ) {
+      if (hostType === "appliance") {
+        if (
+          shouldRestoreApplianceAudioRef.current &&
+          !applianceAutoStartAttemptedRef.current
+        ) {
+          setTimeout(() => {
+            restartRestoredApplianceAudio({ requestStream: true });
+          }, 0);
+        }
+
+        return;
+      }
+
       setTimeout(startListening, 0);
     }
-  }, [isHostLive, role, isListening, userPausedListening]);
+  }, [hostType, isHostLive, role, isListening, userPausedListening]);
 
   if (!role) {
     return (
@@ -765,6 +1413,7 @@ function App() {
         activeRooms={activeRooms}
         statusMessage={message}
         isSocketConnected={isSocketConnected}
+        preferredMode={preferredLandingMode}
       />
     );
   }
@@ -797,10 +1446,13 @@ function App() {
       currentRoom={currentRoom}
       isListening={isListening}
       isHostLive={isHostLive}
+      hostType={hostType}
       leaveRoom={leaveRoom}
       startListening={startListening}
       stopListening={stopListening}
       reconnectAudio={reconnectAudio}
+      resumeApplianceAudio={resumeApplianceAudioFromGesture}
+      needsUserAudioGesture={needsUserAudioGesture}
       remoteAudioRef={remoteAudioRef}
       statusMessage={message}
       isSocketConnected={isSocketConnected}
