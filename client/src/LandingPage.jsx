@@ -1,6 +1,5 @@
 import { useState } from "react";
 import QRScanner from "./QRScanner";
-import BoxHostPanel from "./BoxHostPanel";
 
 function LandingPage({
   roomId,
@@ -71,6 +70,10 @@ function LandingPage({
     }, 0);
   };
 
+  const openApplianceControl = () => {
+    window.location.assign("/admin");
+  };
+
   if (activeMode === "host") {
     return (
       <div className="page-shell">
@@ -99,7 +102,35 @@ function LandingPage({
           </div>
 
           <div className="compact-actions">
-            <BoxHostPanel isSocketConnected={isSocketConnected} />
+            <div className="panel-card managed-host-panel">
+              <div className="section-heading-row">
+                <div>
+                  <span className="metric-label">Physical Boxes</span>
+                  <h2 className="section-title">Appliance Control</h2>
+                </div>
+
+                <div
+                  className={`mini-pill ${
+                    isSocketConnected ? "live" : "offline"
+                  }`}
+                >
+                  {isSocketConnected ? "SERVER" : "OFFLINE"}
+                </div>
+              </div>
+
+              <button
+                className="primary-button"
+                onClick={openApplianceControl}
+                disabled={!isSocketConnected}
+              >
+                Manage Audio Boxes
+              </button>
+
+              <p className="small-note">
+                Admin PIN required. Use this to control connected Raspberry Pi
+                audio appliances.
+              </p>
+            </div>
 
             <div className="host-mode-divider">
               <span>Browser host mode</span>

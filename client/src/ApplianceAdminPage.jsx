@@ -1,54 +1,95 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-function ApplianceAdminPage({ socket, isSocketConnected }) {
+const getApiUrl = () => {
+  if (import.meta.env.VITE_BACKEND_URL) {
+    return import.meta.env.VITE_BACKEND_URL;
+  }
+
+  if (import.meta.env.DEV) {
+    return "http://localhost:5000";
+  }
+
+  return "";
+};
+
+const cleanRoomCode = (code) =>
+  String(code || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+function ApplianceAdminPage({ isSocketConnected }) {
   const [pin, setPin] = useState("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [appliances, setAppliances] = useState([]);
   const [message, setMessage] = useState("Enter admin PIN.");
-  const [roomEdits, setRoomEdits] = useState({});
+  const [setupRequired, setSetupRequired] = useState(false);
+  const [edits, setEdits] = useState({});
+  const apiUrl = getApiUrl();
 
-  useEffect(() => {
-    const handleAppliances = (nextAppliances) => {
-      setAppliances(nextAppliances || []);
-      setRoomEdits((current) => {
-        const next = { ...current };
-
-        (nextAppliances || []).forEach((appliance) => {
-          if (!next[appliance.applianceId]) {
-            next[appliance.applianceId] = appliance.roomCode || "";
-          }
-        });
-
-        return next;
-      });
-    };
-
-    const handleError = (error) => {
-      setMessage(error || "Admin command failed.");
-    };
-
-    socket.on("admin:appliances", handleAppliances);
-    socket.on("admin:error", handleError);
-
-    return () => {
-      socket.off("admin:appliances", handleAppliances);
-      socket.off("admin:error", handleError);
-    };
-  }, [socket]);
-
-  useEffect(() => {
-    if (isAuthenticated && isSocketConnected) {
-      socket.emit("admin:authenticate", { pin: pin.trim() }, (response) => {
-        if (!response?.ok) {
-          setIsAuthenticated(false);
-          setMessage(response?.error || "Admin session expired.");
-          return;
+  const adminFetch = useCallback(
+    async (path, options = {}) => {
+      const response = await fetch(`${apiUrl}${path}`, {
+        ...options,
+        headers: {
+          "content-type": "application/json",
+          "x-admin-pin": pin.trim(),
+          ...(options.headers || {})
         }
-
-        socket.emit("admin:get-appliances");
       });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        const isSetupMessage = response.status === 503;
+        setSetupRequired(isSetupMessage);
+        throw new Error(data.error || "Admin request failed.");
+      }
+
+      setSetupRequired(false);
+      return data;
+    },
+    [apiUrl, pin]
+  );
+
+  const syncEdits = (nextAppliances) => {
+    setEdits((current) => {
+      const next = { ...current };
+
+      nextAppliances.forEach((appliance) => {
+        if (!next[appliance.applianceId]) {
+          next[appliance.applianceId] = {
+            displayName: appliance.displayName || "",
+            roomName: appliance.roomName || "",
+            roomCode: appliance.roomCode || ""
+          };
+        }
+      });
+
+      return next;
+    });
+  };
+
+  const refreshAppliances = useCallback(async () => {
+    try {
+      const data = await adminFetch("/api/appliances");
+      const nextAppliances = data.appliances || [];
+      setAppliances(nextAppliances);
+      syncEdits(nextAppliances);
+      setIsAuthenticated(true);
+      setMessage(
+        nextAppliances.length
+          ? "Admin controls unlocked."
+          : "Admin controls unlocked. No appliances have checked in yet."
+      );
+    } catch (error) {
+      setIsAuthenticated(false);
+      setMessage(error.message);
     }
-  }, [isAuthenticated, isSocketConnected, pin, socket]);
+  }, [adminFetch]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+
+    const timer = window.setInterval(refreshAppliances, 5000);
+    return () => window.clearInterval(timer);
+  }, [isAuthenticated, refreshAppliances]);
 
   const authenticate = () => {
     if (!pin.trim()) {
@@ -56,36 +97,44 @@ function ApplianceAdminPage({ socket, isSocketConnected }) {
       return;
     }
 
-    socket.emit("admin:authenticate", { pin: pin.trim() }, (response) => {
-      if (!response?.ok) {
-        setIsAuthenticated(false);
-        setMessage(response?.error || "Invalid admin PIN.");
-        return;
+    refreshAppliances();
+  };
+
+  const updateEdit = (applianceId, key, value) => {
+    setEdits((current) => ({
+      ...current,
+      [applianceId]: {
+        ...(current[applianceId] || {}),
+        [key]: key === "roomCode" ? cleanRoomCode(value) : value
       }
-
-      setIsAuthenticated(true);
-      setMessage("Admin controls unlocked.");
-    });
+    }));
   };
 
-  const updateRoomCode = (applianceId) => {
-    const nextRoomCode = (roomEdits[applianceId] || "").trim().toUpperCase();
-
-    if (!nextRoomCode) {
-      setMessage("Enter a room code.");
-      return;
+  const saveSettings = async (applianceId) => {
+    try {
+      const payload = edits[applianceId] || {};
+      await adminFetch(`/api/appliances/${applianceId}/settings`, {
+        method: "PATCH",
+        body: JSON.stringify(payload)
+      });
+      setMessage("Settings command sent.");
+      await refreshAppliances();
+    } catch (error) {
+      setMessage(error.message);
     }
-
-    socket.emit("admin:set-room-code", {
-      applianceId,
-      roomCode: nextRoomCode
-    });
-    setMessage("Room code command sent.");
   };
 
-  const sendCommand = (eventName, applianceId, successMessage) => {
-    socket.emit(eventName, { applianceId });
-    setMessage(successMessage);
+  const sendCommand = async (applianceId, command, successMessage) => {
+    try {
+      await adminFetch(`/api/appliances/${applianceId}/${command}`, {
+        method: "POST",
+        body: JSON.stringify({})
+      });
+      setMessage(successMessage);
+      await refreshAppliances();
+    } catch (error) {
+      setMessage(error.message);
+    }
   };
 
   return (
@@ -96,7 +145,11 @@ function ApplianceAdminPage({ socket, isSocketConnected }) {
           <p className="app-subtitle">Manage Raspberry Pi audio boxes.</p>
         </div>
 
-        {message && <div className="status-banner">{message}</div>}
+        {message && (
+          <div className={`status-banner ${setupRequired ? "warning-banner" : ""}`}>
+            {message}
+          </div>
+        )}
 
         <div
           className={`connection-pill ${isSocketConnected ? "live" : "offline"}`}
@@ -106,6 +159,13 @@ function ApplianceAdminPage({ socket, isSocketConnected }) {
 
         {!isAuthenticated ? (
           <div className="compact-actions">
+            {setupRequired && (
+              <p className="small-warning">
+                Set ADMIN_PIN in the backend environment, then restart the
+                backend.
+              </p>
+            )}
+
             <input
               className="room-input compact-input"
               type="password"
@@ -133,127 +193,183 @@ function ApplianceAdminPage({ socket, isSocketConnected }) {
               </div>
             )}
 
-            {appliances.map((appliance) => (
-              <div className="panel-card appliance-card" key={appliance.applianceId}>
-                <div className="appliance-card-header">
-                  <div>
-                    <span className="metric-label">Appliance</span>
-                    <div className="appliance-title">
-                      {appliance.name || appliance.applianceId}
+            {appliances.map((appliance) => {
+              const edit = edits[appliance.applianceId] || {};
+
+              return (
+                <div
+                  className="panel-card appliance-card"
+                  key={appliance.applianceId}
+                >
+                  <div className="appliance-card-header">
+                    <div>
+                      <span className="metric-label">Appliance</span>
+                      <div className="appliance-title">
+                        {appliance.displayName || appliance.applianceId}
+                      </div>
+                    </div>
+
+                    <div
+                      className={`mini-pill ${
+                        appliance.isOnline ? "live" : "offline"
+                      }`}
+                    >
+                      {appliance.isOnline ? "ONLINE" : "OFFLINE"}
                     </div>
                   </div>
 
-                  <div
-                    className={`mini-pill ${
-                      appliance.online ? "live" : "offline"
-                    }`}
-                  >
-                    {appliance.online ? "ONLINE" : "OFFLINE"}
+                  <div className="admin-metrics">
+                    <div>
+                      <span className="metric-label">Room Code</span>
+                      <span className="metric-value">
+                        {appliance.roomCode || "----"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="metric-label">Room Name</span>
+                      <span className="metric-value compact-value">
+                        {appliance.roomName || "Unnamed"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="metric-label">Audio</span>
+                      <span className="metric-value compact-value">
+                        {appliance.isAudioEnabled ? "On" : "Off"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="metric-label">Room</span>
+                      <span className="metric-value compact-value">
+                        {appliance.isRoomActive ? "Active" : "Inactive"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="metric-label">Listeners</span>
+                      <span className="metric-value">
+                        {appliance.listenerCount || 0}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="metric-label">Heartbeat</span>
+                      <span className="metric-value compact-value">
+                        {appliance.lastHeartbeat
+                          ? new Date(appliance.lastHeartbeat).toLocaleTimeString()
+                          : "Never"}
+                      </span>
+                    </div>
                   </div>
-                </div>
 
-                <div className="admin-metrics">
-                  <div>
-                    <span className="metric-label">Room</span>
-                    <span className="metric-value">
-                      {appliance.roomCode || "----"}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="metric-label">Audio</span>
-                    <span className="metric-value">
-                      {appliance.broadcasting ? "On" : "Off"}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="metric-label">Listeners</span>
-                    <span className="metric-value">
-                      {appliance.listenerCount || 0}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="metric-label">Heartbeat</span>
-                    <span className="metric-value compact-value">
-                      {appliance.lastHeartbeat
-                        ? new Date(appliance.lastHeartbeat).toLocaleTimeString()
-                        : "Never"}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="metric-label">Uptime</span>
-                    <span className="metric-value compact-value">
-                      {Math.floor((appliance.uptime || 0) / 60)} min
-                    </span>
-                  </div>
-                </div>
-
-                <div className="admin-control-stack">
-                  <input
-                    className="room-input compact-input"
-                    aria-label={`Room code for ${appliance.applianceId}`}
-                    value={roomEdits[appliance.applianceId] || ""}
-                    onChange={(event) =>
-                      setRoomEdits((current) => ({
-                        ...current,
-                        [appliance.applianceId]: event.target.value.toUpperCase()
-                      }))
-                    }
-                  />
-
-                  <button
-                    className="secondary-button"
-                    onClick={() => updateRoomCode(appliance.applianceId)}
-                    disabled={!appliance.online}
-                  >
-                    Change Room Code
-                  </button>
-
-                  <div className="share-actions">
-                    <button
-                      className="primary-button"
-                      onClick={() =>
-                        sendCommand(
-                          "admin:start-audio",
+                  <div className="admin-control-stack">
+                    <input
+                      className="room-input"
+                      placeholder="Display name"
+                      value={edit.displayName || ""}
+                      onChange={(event) =>
+                        updateEdit(
                           appliance.applianceId,
-                          "Start audio command sent."
+                          "displayName",
+                          event.target.value
                         )
                       }
-                      disabled={!appliance.online}
-                    >
-                      Start Audio
-                    </button>
+                    />
+
+                    <input
+                      className="room-input"
+                      placeholder="Room name"
+                      value={edit.roomName || ""}
+                      onChange={(event) =>
+                        updateEdit(
+                          appliance.applianceId,
+                          "roomName",
+                          event.target.value
+                        )
+                      }
+                    />
+
+                    <input
+                      className="room-input compact-input"
+                      placeholder="Room code"
+                      value={edit.roomCode || ""}
+                      onChange={(event) =>
+                        updateEdit(
+                          appliance.applianceId,
+                          "roomCode",
+                          event.target.value
+                        )
+                      }
+                    />
 
                     <button
                       className="secondary-button"
-                      onClick={() =>
-                        sendCommand(
-                          "admin:stop-audio",
-                          appliance.applianceId,
-                          "Stop audio command sent."
-                        )
-                      }
-                      disabled={!appliance.online}
+                      onClick={() => saveSettings(appliance.applianceId)}
+                      disabled={!appliance.isOnline}
                     >
-                      Stop Audio
+                      Save Settings
                     </button>
-                  </div>
 
-                  <button
-                    className="ghost-button"
-                    onClick={() =>
-                      sendCommand(
-                        "admin:restart",
-                        appliance.applianceId,
-                        "Restart command sent."
-                      )
-                    }
-                    disabled={!appliance.online}
-                  >
-                    Restart Appliance
-                  </button>
+                    <div className="share-actions">
+                      <button
+                        className="primary-button"
+                        onClick={() =>
+                          sendCommand(
+                            appliance.applianceId,
+                            "start-audio",
+                            "Start audio command sent."
+                          )
+                        }
+                        disabled={!appliance.isOnline}
+                      >
+                        Start Audio
+                      </button>
+
+                      <button
+                        className="secondary-button"
+                        onClick={() =>
+                          sendCommand(
+                            appliance.applianceId,
+                            "stop-audio",
+                            "Stop audio command sent."
+                          )
+                        }
+                        disabled={!appliance.isOnline}
+                      >
+                        Stop Audio
+                      </button>
+                    </div>
+
+                    <div className="share-actions">
+                      <button
+                        className="primary-button"
+                        onClick={() =>
+                          sendCommand(
+                            appliance.applianceId,
+                            "activate-room",
+                            "Activate room command sent."
+                          )
+                        }
+                        disabled={!appliance.isOnline}
+                      >
+                        Activate Room
+                      </button>
+
+                      <button
+                        className="secondary-button"
+                        onClick={() =>
+                          sendCommand(
+                            appliance.applianceId,
+                            "deactivate-room",
+                            "Deactivate room command sent."
+                          )
+                        }
+                        disabled={!appliance.isOnline}
+                      >
+                        Deactivate Room
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

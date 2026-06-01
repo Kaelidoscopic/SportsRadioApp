@@ -26,19 +26,35 @@ const adminSockets = new Set();
 
 const nowIso = () => new Date().toISOString();
 
-const requireUserId = (req, res) => {
-  const userId = String(req.get("x-user-id") || "").trim();
+const getAdminPin = () => process.env.ADMIN_PIN || process.env.SPORTSYNC_ADMIN_PIN || "";
 
-  if (!userId) {
-    res.status(401).json({ error: "User account is required." });
-    return null;
+const readAdminPin = (req) => {
+  const authHeader = String(req.get("authorization") || "");
+
+  if (authHeader.toLowerCase().startsWith("bearer ")) {
+    return authHeader.slice(7).trim();
   }
 
-  return userId;
+  return String(req.get("x-admin-pin") || req.body?.adminPin || "").trim();
 };
 
-const getDefaultPairingCode = (applianceId) =>
-  String(applianceId || "").trim().toUpperCase();
+const requireAdminPin = (req, res) => {
+  const adminPin = getAdminPin();
+
+  if (!adminPin) {
+    res.status(503).json({
+      error: "Admin PIN is not configured. Set ADMIN_PIN on the backend."
+    });
+    return false;
+  }
+
+  if (readAdminPin(req) !== adminPin) {
+    res.status(401).json({ error: "Invalid admin PIN." });
+    return false;
+  }
+
+  return true;
+};
 
 const getManagedAppliance = (applianceId) => appliances[applianceId] || null;
 
@@ -53,20 +69,21 @@ const createOrUpdateManagedAppliance = (payload = {}, socketId = null) => {
   const isAudioEnabled =
     typeof payload.isAudioEnabled === "boolean"
       ? payload.isAudioEnabled
+      : typeof payload.audioEnabled === "boolean"
+        ? payload.audioEnabled
       : payload.audioStatus
         ? payload.audioStatus === "running"
         : Boolean(existing.isAudioEnabled);
   const isRoomActive =
     typeof payload.isRoomActive === "boolean"
       ? payload.isRoomActive
+      : typeof payload.roomActive === "boolean"
+        ? payload.roomActive
       : Boolean(existing.isRoomActive || room?.hostSocketId);
   const timestamp = nowIso();
 
   appliances[applianceId] = {
     applianceId,
-    ownerUserId: existing.ownerUserId || payload.ownerUserId || null,
-    pairingCode:
-      payload.pairingCode || existing.pairingCode || getDefaultPairingCode(applianceId),
     displayName: payload.displayName || payload.name || existing.displayName || applianceId,
     roomCode,
     roomName: payload.roomName || existing.roomName || roomCode,
@@ -89,12 +106,11 @@ const createOrUpdateManagedAppliance = (payload = {}, socketId = null) => {
   return appliances[applianceId];
 };
 
-const toOwnerApplianceDto = (appliance) => {
+const toApplianceDto = (appliance) => {
   const room = rooms[appliance.roomCode];
 
   return {
     applianceId: appliance.applianceId,
-    ownerUserId: appliance.ownerUserId,
     displayName: appliance.displayName,
     roomCode: appliance.roomCode,
     roomName: appliance.roomName,
@@ -106,20 +122,6 @@ const toOwnerApplianceDto = (appliance) => {
     createdAt: appliance.createdAt,
     updatedAt: appliance.updatedAt
   };
-};
-
-const getOwnedAppliance = (req, res) => {
-  const userId = requireUserId(req, res);
-  if (!userId) return null;
-
-  const appliance = getManagedAppliance(req.params.id);
-
-  if (!appliance || appliance.ownerUserId !== userId) {
-    res.status(404).json({ error: "Appliance not found." });
-    return null;
-  }
-
-  return appliance;
 };
 
 const getPublicRooms = () =>
@@ -721,10 +723,14 @@ io.on("connection", (socket) => {
   });
 
   socket.on("admin:authenticate", ({ pin } = {}, callback) => {
-    const adminPin = process.env.ADMIN_PIN || process.env.SPORTSYNC_ADMIN_PIN;
+    const adminPin = getAdminPin();
 
     if (!adminPin) {
-      callback?.({ ok: false, error: "Admin PIN is not configured." });
+      callback?.({
+        ok: false,
+        setupRequired: true,
+        error: "Admin PIN is not configured. Set ADMIN_PIN on the backend."
+      });
       return;
     }
 
@@ -756,12 +762,26 @@ io.on("connection", (socket) => {
     });
   });
 
+  socket.on("admin:set-settings", ({ applianceId, settings } = {}) => {
+    sendApplianceCommand(socket, applianceId, "appliance:set-settings", {
+      settings
+    });
+  });
+
   socket.on("admin:start-audio", ({ applianceId } = {}) => {
     sendApplianceCommand(socket, applianceId, "appliance:start-audio");
   });
 
   socket.on("admin:stop-audio", ({ applianceId } = {}) => {
     sendApplianceCommand(socket, applianceId, "appliance:stop-audio");
+  });
+
+  socket.on("admin:activate-room", ({ applianceId } = {}) => {
+    sendApplianceCommand(socket, applianceId, "appliance:activate-room");
+  });
+
+  socket.on("admin:deactivate-room", ({ applianceId } = {}) => {
+    sendApplianceCommand(socket, applianceId, "appliance:deactivate-room");
   });
 
   socket.on("admin:restart", ({ applianceId } = {}) => {
@@ -870,50 +890,54 @@ app.post(
   }
 );
 
-app.get("/api/appliances/mine", (req, res) => {
-  const userId = requireUserId(req, res);
-  if (!userId) return;
+const getAdminAppliance = (req, res) => {
+  if (!requireAdminPin(req, res)) return null;
+
+  const appliance = getManagedAppliance(req.params.applianceId);
+
+  if (!appliance) {
+    res.status(404).json({ error: "Appliance not found." });
+    return null;
+  }
+
+  return appliance;
+};
+
+const sendAdminApplianceCommand = (res, appliance, eventName, payload = {}) => {
+  const delivered = sendCommandToAppliance(
+    appliance.applianceId,
+    eventName,
+    payload
+  );
+
+  if (!delivered) {
+    res.status(409).json({
+      error: "Appliance is offline. Command was not delivered.",
+      appliance: toApplianceDto(appliance)
+    });
+    return false;
+  }
+
+  return true;
+};
+
+app.get("/api/appliances", (req, res) => {
+  if (!requireAdminPin(req, res)) return;
 
   res.json({
-    appliances: Object.values(appliances)
-      .filter((appliance) => appliance.ownerUserId === userId)
-      .map(toOwnerApplianceDto)
+    appliances: Object.values(appliances).map(toApplianceDto)
   });
 });
 
-app.post("/api/appliances/link", (req, res) => {
-  const userId = requireUserId(req, res);
-  if (!userId) return;
+app.get("/api/appliances/:applianceId", (req, res) => {
+  const appliance = getAdminAppliance(req, res);
+  if (!appliance) return;
 
-  const pairingCode = String(req.body?.pairingCode || "").trim().toUpperCase();
-
-  if (!pairingCode) {
-    res.status(400).json({ error: "Pairing code is required." });
-    return;
-  }
-
-  const appliance = Object.values(appliances).find(
-    (candidate) => String(candidate.pairingCode || "").toUpperCase() === pairingCode
-  );
-
-  if (!appliance) {
-    res.status(404).json({ error: "No appliance found for that pairing code." });
-    return;
-  }
-
-  if (appliance.ownerUserId && appliance.ownerUserId !== userId) {
-    res.status(409).json({ error: "Appliance is already linked." });
-    return;
-  }
-
-  appliance.ownerUserId = userId;
-  appliance.updatedAt = nowIso();
-
-  res.json({ appliance: toOwnerApplianceDto(appliance) });
+  res.json({ appliance: toApplianceDto(appliance) });
 });
 
-app.patch("/api/appliances/:id/settings", (req, res) => {
-  const appliance = getOwnedAppliance(req, res);
+app.patch("/api/appliances/:applianceId/settings", (req, res) => {
+  const appliance = getAdminAppliance(req, res);
   if (!appliance) return;
 
   const updates = {};
@@ -937,85 +961,84 @@ app.patch("/api/appliances/:id/settings", (req, res) => {
     updates.roomCode = nextRoomCode;
   }
 
+  if (Object.keys(updates).length === 0) {
+    res.json({ appliance: toApplianceDto(appliance), delivered: false });
+    return;
+  }
+
+  if (
+    !sendAdminApplianceCommand(res, appliance, "appliance:set-settings", {
+      settings: updates
+    })
+  ) {
+    return;
+  }
+
   Object.assign(appliance, updates, { updatedAt: nowIso() });
-
-  if (updates.roomCode) {
-    sendCommandToAppliance(appliance.applianceId, "appliance:set-room-code", {
-      roomCode: appliance.roomCode
-    });
-  }
-
-  if (updates.roomName) {
-    sendCommandToAppliance(appliance.applianceId, "appliance:set-room-name", {
-      roomName: appliance.roomName
-    });
-  }
-
   emitApplianceList();
-  res.json({ appliance: toOwnerApplianceDto(appliance) });
+  res.json({ appliance: toApplianceDto(appliance), delivered: true });
 });
 
-app.post("/api/appliances/:id/start-room", (req, res) => {
-  const appliance = getOwnedAppliance(req, res);
+app.post("/api/appliances/:applianceId/start-audio", (req, res) => {
+  const appliance = getAdminAppliance(req, res);
   if (!appliance) return;
 
-  appliance.isRoomActive = true;
-  appliance.updatedAt = nowIso();
-  const delivered = sendCommandToAppliance(
-    appliance.applianceId,
-    "appliance:activate-room",
-    {
-      roomCode: appliance.roomCode,
-      roomName: appliance.roomName
-    }
-  );
-
-  res.json({ appliance: toOwnerApplianceDto(appliance), delivered });
-});
-
-app.post("/api/appliances/:id/stop-room", (req, res) => {
-  const appliance = getOwnedAppliance(req, res);
-  if (!appliance) return;
-
-  appliance.isRoomActive = false;
-  appliance.isAudioEnabled = false;
-  appliance.updatedAt = nowIso();
-  markApplianceOffline(appliance.roomCode, "Owner deactivated appliance room.");
-  const delivered = sendCommandToAppliance(
-    appliance.applianceId,
-    "appliance:deactivate-room"
-  );
-
-  res.json({ appliance: toOwnerApplianceDto(appliance), delivered });
-});
-
-app.post("/api/appliances/:id/start-audio", (req, res) => {
-  const appliance = getOwnedAppliance(req, res);
-  if (!appliance) return;
+  if (!sendAdminApplianceCommand(res, appliance, "appliance:start-audio")) return;
 
   appliance.isAudioEnabled = true;
   appliance.isRoomActive = true;
   appliance.updatedAt = nowIso();
-  const delivered = sendCommandToAppliance(
-    appliance.applianceId,
-    "appliance:start-audio"
-  );
-
-  res.json({ appliance: toOwnerApplianceDto(appliance), delivered });
+  emitApplianceList();
+  res.json({ appliance: toApplianceDto(appliance), delivered: true });
 });
 
-app.post("/api/appliances/:id/stop-audio", (req, res) => {
-  const appliance = getOwnedAppliance(req, res);
+app.post("/api/appliances/:applianceId/stop-audio", (req, res) => {
+  const appliance = getAdminAppliance(req, res);
   if (!appliance) return;
+
+  if (!sendAdminApplianceCommand(res, appliance, "appliance:stop-audio")) return;
 
   appliance.isAudioEnabled = false;
   appliance.updatedAt = nowIso();
-  const delivered = sendCommandToAppliance(
-    appliance.applianceId,
-    "appliance:stop-audio"
-  );
+  emitApplianceList();
+  res.json({ appliance: toApplianceDto(appliance), delivered: true });
+});
 
-  res.json({ appliance: toOwnerApplianceDto(appliance), delivered });
+app.post("/api/appliances/:applianceId/activate-room", (req, res) => {
+  const appliance = getAdminAppliance(req, res);
+  if (!appliance) return;
+
+  if (
+    !sendAdminApplianceCommand(res, appliance, "appliance:activate-room", {
+      roomCode: appliance.roomCode,
+      roomName: appliance.roomName
+    })
+  ) {
+    return;
+  }
+
+  appliance.isRoomActive = true;
+  appliance.updatedAt = nowIso();
+  emitApplianceList();
+  res.json({ appliance: toApplianceDto(appliance), delivered: true });
+});
+
+app.post("/api/appliances/:applianceId/deactivate-room", (req, res) => {
+  const appliance = getAdminAppliance(req, res);
+  if (!appliance) return;
+
+  if (
+    !sendAdminApplianceCommand(res, appliance, "appliance:deactivate-room")
+  ) {
+    return;
+  }
+
+  appliance.isRoomActive = false;
+  appliance.isAudioEnabled = false;
+  appliance.updatedAt = nowIso();
+  markApplianceOffline(appliance.roomCode, "Admin deactivated appliance room.");
+  emitApplianceList();
+  res.json({ appliance: toApplianceDto(appliance), delivered: true });
 });
 
 app.get("/", (req, res) => {

@@ -14,7 +14,6 @@ const CONFIG_PATH =
 const DEFAULT_CONFIG = {
   applianceId: process.env.SPORTSYNC_APPLIANCE_ID || "HOUSE_BOX_1",
   displayName: process.env.SPORTSYNC_APPLIANCE_NAME || "House Box 1",
-  pairingCode: process.env.SPORTSYNC_PAIRING_CODE || "HOUSE-5235",
   roomCode: (process.env.SPORTSYNC_ROOM_CODE || "HOME").toUpperCase(),
   roomName: process.env.SPORTSYNC_ROOM_NAME || "Home Audio",
   audioDevice: process.env.SPORTSYNC_AUDIO_DEVICE || "auto",
@@ -33,8 +32,6 @@ const ROOM_404_EXIT_AFTER_MS = Number(
 
 const sanitizeRoomCode = (code) =>
   String(code || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-
-const defaultPairingCode = (id) => String(id || "HOUSE_BOX_1").toUpperCase();
 
 const readApplianceConfig = () => {
   try {
@@ -70,7 +67,6 @@ if (!fs.existsSync(CONFIG_PATH)) {
 
 let applianceId = applianceConfigState.applianceId;
 let displayName = applianceConfigState.displayName || applianceId;
-let pairingCode = applianceConfigState.pairingCode || defaultPairingCode(applianceId);
 let roomCode = applianceConfigState.roomCode || "HOME";
 let roomName = applianceConfigState.roomName || roomCode;
 let audioDeviceSetting = applianceConfigState.audioDevice || "auto";
@@ -131,12 +127,13 @@ const getStatusPayload = () => ({
   applianceId,
   name: displayName,
   displayName,
-  pairingCode,
   roomCode,
   roomName,
   online: true,
   isRoomActive: roomActive,
   isAudioEnabled: audioEnabled,
+  roomActive,
+  audioEnabled,
   audioStatus: audioEnabled && arecord ? "running" : "stopped",
   uptime: Math.floor((Date.now() - startedAt) / 1000),
   lastHeartbeat: new Date().toISOString(),
@@ -511,8 +508,6 @@ const applyConfig = (updates = {}) => {
   applianceConfigState.roomCode = sanitizeRoomCode(applianceConfigState.roomCode);
   applianceConfigState.displayName =
     applianceConfigState.displayName || applianceConfigState.applianceId;
-  applianceConfigState.pairingCode =
-    applianceConfigState.pairingCode || defaultPairingCode(applianceConfigState.applianceId);
   applianceConfigState.roomName =
     applianceConfigState.roomName || applianceConfigState.roomCode;
   applianceConfigState.audioDevice = applianceConfigState.audioDevice || "auto";
@@ -521,7 +516,6 @@ const applyConfig = (updates = {}) => {
 
   applianceId = applianceConfigState.applianceId || applianceId;
   displayName = applianceConfigState.displayName || applianceId;
-  pairingCode = applianceConfigState.pairingCode || defaultPairingCode(applianceId);
   roomCode = applianceConfigState.roomCode || roomCode;
   roomName = applianceConfigState.roomName || roomCode;
   audioDeviceSetting = applianceConfigState.audioDevice;
@@ -556,6 +550,47 @@ const changeRoomName = async (nextRoomName) => {
   if (!cleanRoomName || cleanRoomName === roomName) return;
 
   applyConfig({ roomName: cleanRoomName });
+
+  if (roomActive) {
+    await ensureRoomRegistered();
+  }
+
+  emitStatus();
+};
+
+const applySettingsCommand = async ({ settings = {} } = {}) => {
+  const updates = {};
+
+  if (typeof settings.displayName === "string" && settings.displayName.trim()) {
+    updates.displayName = settings.displayName.trim();
+  }
+
+  if (typeof settings.roomName === "string" && settings.roomName.trim()) {
+    updates.roomName = settings.roomName.trim();
+  }
+
+  if (typeof settings.roomCode === "string" && sanitizeRoomCode(settings.roomCode)) {
+    updates.roomCode = sanitizeRoomCode(settings.roomCode);
+  }
+
+  if (Object.keys(updates).length === 0) {
+    emitStatus();
+    return;
+  }
+
+  const previousRoomPath = updates.roomCode ? applianceRoomPath("stop") : null;
+  applyConfig(updates);
+
+  if (previousRoomPath) {
+    roomRegistered = false;
+    applianceAutoRestart();
+
+    try {
+      await postJson(previousRoomPath, {});
+    } catch (error) {
+      console.error("Previous room stop failed:", error.message);
+    }
+  }
 
   if (roomActive) {
     await ensureRoomRegistered();
@@ -652,6 +687,8 @@ const connectCommandSocket = () => {
   commandSocket.on("set-room-code", handleSetRoomCode);
   commandSocket.on("appliance:set-room-name", handleSetRoomName);
   commandSocket.on("set-room-name", handleSetRoomName);
+  commandSocket.on("appliance:set-settings", applySettingsCommand);
+  commandSocket.on("set-settings", applySettingsCommand);
 
   commandSocket.on("appliance:start-audio", startAudioCommand);
   commandSocket.on("start-audio", startAudioCommand);
@@ -676,7 +713,6 @@ const main = async () => {
   console.log(`Pi host appliance ID: ${applianceId}`);
   console.log(`Pi host room code: ${roomCode}`);
   console.log(`Pi host room name: ${roomName}`);
-  console.log(`Pi host pairing code: ${pairingCode}`);
   console.log(`Pi host audio device setting: ${audioDeviceSetting}`);
   console.log(`Start endpoint: ${applianceRoomPath("start")}`);
   console.log(`Heartbeat endpoint: ${applianceRoomPath("heartbeat")}`);
