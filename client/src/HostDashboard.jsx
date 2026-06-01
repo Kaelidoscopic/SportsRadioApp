@@ -3,11 +3,9 @@ import QRJoinScreen from "./QRJoinScreen";
 function HostDashboard({
   currentRoom,
   isBroadcasting,
-  isMuted,
   leaveRoom,
   startBroadcasting,
   stopBroadcasting,
-  toggleMute,
   audioInputs = [],
   selectedAudioInput,
   setSelectedAudioInput,
@@ -24,25 +22,6 @@ function HostDashboard({
     ? `${frontendUrl}/?room=${currentRoom}`
     : "";
 
-  const handleBroadcastToggle = () => {
-    if (isBroadcasting) {
-      stopBroadcasting();
-    } else {
-      startBroadcasting();
-    }
-  };
-
-  const statusText = isBroadcasting
-    ? isMuted
-      ? "MUTED"
-      : "LIVE"
-    : "OFFLINE";
-
-  const copyRoomCode = async () => {
-    if (!currentRoom) return;
-    await navigator.clipboard.writeText(currentRoom);
-  };
-
   const copyJoinLink = async () => {
     if (!joinLink) return;
     await navigator.clipboard.writeText(joinLink);
@@ -50,30 +29,27 @@ function HostDashboard({
 
   return (
     <div className="page-shell">
-      <div className="main-card dashboard-card host-card">
+      <div className="main-card dashboard-card host-card simple-host-card">
+        <div className="brand-block centered-brand">
+          <h1 className="app-title">Broadcasting</h1>
+          <p className="app-subtitle">Room code</p>
+        </div>
+
         <div className="room-code-card host-room-card">
           <div className="room-code-value">{currentRoom || "------"}</div>
-
           <div className={`live-pill ${isBroadcasting ? "live" : "offline"}`}>
-            {statusText}
+            {isBroadcasting ? "LIVE" : "READY"}
           </div>
         </div>
 
-        <div className="status-grid">
+        <div className="simple-status-row">
           <div className="metric-card">
             <span className="metric-label">Listeners</span>
             <span className="metric-value">{listenerCount}</span>
           </div>
 
           <div className="metric-card">
-            <span className="metric-label">Room</span>
-            <span className="metric-value">
-              {currentRoom ? "Open" : "Closed"}
-            </span>
-          </div>
-
-          <div className="metric-card">
-            <span className="metric-label">Server</span>
+            <span className="metric-label">Connection</span>
             <span className="metric-value">
               {isSocketConnected ? "Connected" : "Offline"}
             </span>
@@ -85,80 +61,61 @@ function HostDashboard({
         <QRJoinScreen roomCode={currentRoom} joinUrl={joinLink} />
 
         {currentRoom && (
-          <div className="share-actions">
-            <button className="secondary-button" onClick={copyRoomCode}>
-              Copy Room Code
-            </button>
+          <button className="secondary-button" onClick={copyJoinLink}>
+            QR / Share Link
+          </button>
+        )}
 
-            <button className="secondary-button" onClick={copyJoinLink}>
-              Copy Join Link
+        {!isBroadcasting && (
+          <div className="panel-card host-controls">
+            <select
+              className="audio-select"
+              value={broadcastSourceType}
+              onChange={(event) => setBroadcastSourceType(event.target.value)}
+            >
+              <option value="input">Audio Input</option>
+              <option value="tab">Browser Tab / Screen</option>
+            </select>
+
+            {broadcastSourceType === "input" && (
+              <>
+                <select
+                  className="audio-select"
+                  value={selectedAudioInput}
+                  onChange={(event) => setSelectedAudioInput(event.target.value)}
+                  disabled={audioInputs.length === 0}
+                >
+                  {audioInputs.length === 0 ? (
+                    <option value="">No audio inputs found</option>
+                  ) : (
+                    audioInputs.map((device, index) => (
+                      <option key={device.deviceId} value={device.deviceId}>
+                        {device.label || `Audio Input ${index + 1}`}
+                      </option>
+                    ))
+                  )}
+                </select>
+
+                <button className="ghost-button" onClick={refreshAudioInputs}>
+                  Refresh Audio Devices
+                </button>
+              </>
+            )}
+
+            <button
+              className="primary-button big-button"
+              onClick={startBroadcasting}
+              disabled={!isSocketConnected}
+            >
+              Start Broadcast
             </button>
           </div>
         )}
 
-        <div className="panel-card host-controls">
-          {!isBroadcasting && (
-            <p className="host-hint">
-              Choose an audio input device, or share audio from a browser tab or screen.
-            </p>
-          )}
-
-          <select
-            className="audio-select"
-            value={broadcastSourceType}
-            onChange={(e) => setBroadcastSourceType(e.target.value)}
-            disabled={isBroadcasting}
-          >
-            <option value="input">Audio Input Device</option>
-            <option value="tab">Browser Tab / Screen Audio</option>
-          </select>
-
-          {broadcastSourceType === "input" && (
-            <>
-              <select
-                className="audio-select"
-                value={selectedAudioInput}
-                onChange={(e) => setSelectedAudioInput(e.target.value)}
-                disabled={isBroadcasting || audioInputs.length === 0}
-              >
-                {audioInputs.length === 0 ? (
-                  <option value="">No audio inputs found</option>
-                ) : (
-                  audioInputs.map((device, index) => (
-                    <option key={device.deviceId} value={device.deviceId}>
-                      {device.label || `Audio Input ${index + 1}`}
-                    </option>
-                  ))
-                )}
-              </select>
-
-              <button
-                className="ghost-button"
-                onClick={refreshAudioInputs}
-                disabled={isBroadcasting}
-              >
-                Refresh Audio Devices
-              </button>
-
-              {audioInputs.length === 0 && (
-                <p className="small-warning">
-                  No audio input devices detected.
-                </p>
-              )}
-            </>
-          )}
-
-          <button
-            className="primary-button"
-            onClick={handleBroadcastToggle}
-            disabled={!isSocketConnected && !isBroadcasting}
-          >
-            {isBroadcasting ? "Stop Broadcasting" : "Choose Audio Source"}
-          </button>
-
+        <div className="compact-actions">
           {isBroadcasting && (
-            <button className="secondary-button" onClick={toggleMute}>
-              {isMuted ? "Unmute Broadcast" : "Mute Broadcast"}
+            <button className="primary-button big-button stop-button" onClick={stopBroadcasting}>
+              Stop Broadcast
             </button>
           )}
 

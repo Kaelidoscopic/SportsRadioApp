@@ -3,82 +3,65 @@ function ListenerDashboard({
   isListening,
   isHostLive,
   hostType = "browser",
+  sourceName,
   leaveRoom,
   startListening,
-  stopListening,
-  reconnectAudio,
   resumeApplianceAudio,
   needsUserAudioGesture = false,
   remoteAudioRef,
   statusMessage,
   isSocketConnected
 }) {
-  const handleListeningToggle = () => {
-    if (isListening) {
-      stopListening();
-    } else {
-      startListening();
+  const roomLabel =
+    sourceName ||
+    (hostType === "appliance" ? `TV Audio - ${currentRoom}` : `Room ${currentRoom}`);
+  const isConnected = isSocketConnected && isHostLive;
+  const shouldShowStartButton = !isListening || needsUserAudioGesture;
+
+  const handleStart = () => {
+    if (needsUserAudioGesture && hostType === "appliance") {
+      resumeApplianceAudio();
+      return;
     }
+
+    startListening();
   };
 
   return (
     <div className="page-shell">
-      <div className="main-card dashboard-card listener-card">
-        <div className="room-code-card listener-room-card">
-          <div className="room-code-value">{currentRoom || "------"}</div>
+      <div className="main-card dashboard-card listener-card simple-listener-card">
+        <div className="brand-block centered-brand">
+          <h1 className="app-title">{roomLabel}</h1>
+          <p className="app-subtitle">
+            {isConnected ? "You're connected" : "Waiting for audio"}
+          </p>
+        </div>
 
+        <div className="simple-status-row">
           <div className={`live-pill ${isHostLive ? "live" : "offline"}`}>
-            {isHostLive ? "ONLINE" : "OFFLINE"}
+            {isHostLive ? "LIVE" : "OFFLINE"}
+          </div>
+
+          <div className={`connection-pill ${isSocketConnected ? "live" : "offline"}`}>
+            {isSocketConnected ? "Connected" : "Disconnected"}
           </div>
         </div>
 
-        <div className="panel-card listener-controls">
-          {statusMessage && <div className="status-banner">{statusMessage}</div>}
+        {statusMessage && <div className="status-banner">{statusMessage}</div>}
 
-          <div
-            className={`connection-pill ${
-              isSocketConnected ? "live" : "offline"
-            }`}
-          >
-            {isSocketConnected ? "Server connected" : "Server disconnected"}
-          </div>
-
-          <div className={`live-pill ${isListening ? "live" : "offline"}`}>
-            {isListening ? "LIVE" : "PAUSED"}
-          </div>
-
-          <div className="source-pill">
-            {hostType === "appliance" ? "Pi appliance" : "Browser host"}
-          </div>
-
-          <button
-            className="primary-button"
-            onClick={handleListeningToggle}
-            disabled={(!isHostLive || !isSocketConnected) && !isListening}
-          >
-            {isListening ? "Stop Listening" : "Start Listening"}
-          </button>
-
-          {needsUserAudioGesture && hostType === "appliance" && (
+        <div className="compact-actions">
+          {shouldShowStartButton && (
             <button
-              className="primary-button"
-              onClick={resumeApplianceAudio}
+              className="primary-button big-button"
+              onClick={handleStart}
               disabled={!isHostLive || !isSocketConnected}
             >
-              Tap to Start Listening
+              {needsUserAudioGesture ? "Tap to Start Listening" : "Start Listening"}
             </button>
           )}
 
-          <button
-            className="secondary-button"
-            onClick={reconnectAudio}
-            disabled={!isHostLive || !isSocketConnected}
-          >
-            Reconnect Audio
-          </button>
-
           <button className="ghost-button" onClick={leaveRoom}>
-            Leave Room
+            Leave Audio
           </button>
         </div>
 

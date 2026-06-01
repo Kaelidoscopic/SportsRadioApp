@@ -1451,6 +1451,11 @@ function App() {
       isListening={isListening}
       isHostLive={isHostLive}
       hostType={hostType}
+      sourceName={
+        applianceDetails?.roomName ||
+        applianceDetails?.displayName ||
+        applianceDetails?.applianceId
+      }
       leaveRoom={leaveRoom}
       startListening={startListening}
       stopListening={stopListening}

@@ -44,6 +44,20 @@ select:disabled {
   padding: 1.75rem;
 }
 
+.synclink-screen {
+  max-width: 430px;
+}
+
+.synclink-brand {
+  margin: 1.25rem 0 2rem;
+}
+
+.synclink-logo {
+  color: #f3f4f6;
+  font-size: 2.7rem;
+  font-weight: 800;
+}
+
 .app-home-card {
   max-width: 540px;
 }
@@ -216,7 +230,7 @@ select:disabled {
 
 .action-card-button {
   width: 100%;
-  min-height: 150px;
+  min-height: 132px;
   background: #1d212b;
   border: 1px solid #2d3442;
   border-radius: 16px;
@@ -229,6 +243,21 @@ select:disabled {
   padding: 1.25rem;
   text-align: left;
   transition: 0.2s ease;
+}
+
+.stacked-option-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.stacked-option-list .action-card-button {
+  min-height: 104px;
+}
+
+.recommended-card {
+  border-color: rgba(79, 140, 255, 0.8);
+  background: #20293a;
 }
 
 .action-card-button:hover:not(:disabled) {
@@ -244,6 +273,36 @@ select:disabled {
 .action-card-copy {
   color: #b8c0cc;
   line-height: 1.45;
+}
+
+.big-button {
+  min-height: 56px;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.small-link-row {
+  display: flex;
+  justify-content: center;
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+}
+
+.text-link-button {
+  background: transparent;
+  border: none;
+  color: #aeb6c3;
+  cursor: pointer;
+  padding: 0.25rem;
+}
+
+.text-link-button:hover {
+  color: #f3f4f6;
+}
+
+.center-link {
+  display: block;
+  margin: 1rem auto 0;
 }
 
 .section-heading-row {
@@ -453,6 +512,15 @@ select:disabled {
   letter-spacing: 0.08rem;
 }
 
+.room-code-input {
+  min-height: 64px;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.14rem;
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
 .primary-button,
 .secondary-button,
 .ghost-button {
@@ -546,6 +614,35 @@ select:disabled {
   background: rgba(34, 197, 94, 0.18);
   color: #7ff0a2;
   border: 1px solid rgba(34, 197, 94, 0.45);
+}
+
+.simple-listener-card,
+.simple-host-card {
+  max-width: 460px;
+}
+
+.simple-status-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.simple-status-row .connection-pill,
+.simple-status-row .live-pill {
+  width: 100%;
+  margin: 0;
+  align-items: center;
+  display: flex;
+  justify-content: center;
+}
+
+.stop-button {
+  background: #ef4444;
+}
+
+.stop-button:hover {
+  background: #dc2626;
 }
 
 .offline,
@@ -719,6 +816,7 @@ audio {
   .admin-metrics,
   .smart-box-actions,
   .inline-control-row,
+  .simple-status-row,
   .qr-join-card {
     grid-template-columns: 1fr;
   }
