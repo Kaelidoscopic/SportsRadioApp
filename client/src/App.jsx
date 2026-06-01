@@ -53,7 +53,10 @@ function App() {
   const [isSocketConnected, setIsSocketConnected] = useState(socket.connected);
   const [hostType, setHostType] = useState("browser");
   const [applianceDetails, setApplianceDetails] = useState(null);
-  const [preferredLandingMode, setPreferredLandingMode] = useState(null);
+  const [preferredLandingMode, setPreferredLandingMode] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("room") ? "join" : null;
+  });
   const [needsUserAudioGesture, setNeedsUserAudioGesture] = useState(false);
 
   const [activeRooms, setActiveRooms] = useState([]);
@@ -907,7 +910,7 @@ function App() {
         setMessage(
           "Saved room is not online yet. Start the Pi host or tap Join Audio to try again."
         );
-        setPreferredLandingMode("listener");
+        setPreferredLandingMode("join");
         return;
       }
 
@@ -1346,9 +1349,6 @@ function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const roomFromUrl = params.get("room");
-    const savedListenerRoom = localStorage.getItem(savedListenerRoomKey);
-    const savedWasListening =
-      localStorage.getItem(savedListenerWasListeningKey) === "true";
 
     if (roomFromUrl) {
       const cleanRoomCode = roomFromUrl.trim().toUpperCase();
@@ -1360,7 +1360,7 @@ function App() {
         applianceAutoStartAttemptedRef.current = false;
         setNeedsUserAudioGesture(false);
         setUserPausedListening(false);
-        setPreferredLandingMode("listener");
+        setPreferredLandingMode("join");
         setMessage(`Joining room ${cleanRoomCode}...`);
         requestJoinRoom(cleanRoomCode);
       }, 300);
@@ -1368,21 +1368,10 @@ function App() {
       return;
     }
 
-    if (savedListenerRoom) {
-      const cleanRoomCode = savedListenerRoom.trim().toUpperCase();
-
-      setTimeout(() => {
-        linkJoinRoomRef.current = cleanRoomCode;
-        linkJoinRetryCountRef.current = 0;
-        shouldRestoreApplianceAudioRef.current = savedWasListening;
-        applianceAutoStartAttemptedRef.current = false;
-        setNeedsUserAudioGesture(false);
-        setUserPausedListening(!savedWasListening);
-        setPreferredLandingMode("listener");
-        setMessage(`Reconnecting to saved room ${cleanRoomCode}...`);
-        requestJoinRoom(cleanRoomCode);
-      }, 300);
-    }
+    clearSavedListenerSession();
+    localStorage.removeItem("venueAudioHostCode");
+    localStorage.removeItem("venueAudioHostMode");
+    setRoomId("");
   }, []);
 
   useEffect(() => {

@@ -22,6 +22,19 @@ Hosts eventually create an account, link purchased boxes, and manage those boxes
 
 Phase 1 uses a placeholder login/sign-up screen and the existing admin PIN fallback. This keeps appliance control private while the real account system is not ready yet.
 
+## Navigation Flow
+
+The app should keep movement obvious and avoid stale form text after refresh:
+
+- `/auth` or first screen: Login / Sign Up, with a secondary option to join audio without an account
+- `/home`: two primary actions after login, Join Audio and Host Audio
+- `/join`: Join by Code, Scan QR Code, and Join Room in Area
+- `/host`: Host with Audio Box and Host from Browser
+- `/boxes`: My Audio Boxes dashboard for linked physical appliances
+- `/browser-host`: existing browser host flow, kept separate from physical boxes
+
+Temporary form input, including typed room codes, should not be persisted across a normal refresh. The only exception is a direct listener URL such as `/?room=HOME`, which may prefill the code and attempt to join that room.
+
 ## Box Dashboard
 
 The dashboard should feel like a smart-device app:

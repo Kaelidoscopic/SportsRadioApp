@@ -201,6 +201,51 @@ select:disabled {
   margin-bottom: 1rem;
 }
 
+.action-card-grid,
+.option-section-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 1.25rem 0;
+}
+
+.option-section-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+.action-card-button {
+  width: 100%;
+  min-height: 150px;
+  background: #1d212b;
+  border: 1px solid #2d3442;
+  border-radius: 16px;
+  color: #f3f4f6;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.55rem;
+  padding: 1.25rem;
+  text-align: left;
+  transition: 0.2s ease;
+}
+
+.action-card-button:hover:not(:disabled) {
+  background: #252b38;
+  border-color: #4f8cff;
+}
+
+.action-card-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.action-card-copy {
+  color: #b8c0cc;
+  line-height: 1.45;
+}
+
 .section-heading-row {
   display: flex;
   justify-content: space-between;
@@ -668,6 +713,8 @@ audio {
   }
 
   .share-actions,
+  .action-card-grid,
+  .option-section-grid,
   .status-grid,
   .admin-metrics,
   .smart-box-actions,
