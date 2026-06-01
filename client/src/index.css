@@ -448,6 +448,11 @@ select:disabled {
   background: #252b38;
 }
 
+.smart-box-card:focus-visible {
+  outline: 2px solid #4f8cff;
+  outline-offset: 2px;
+}
+
 .smart-box-name {
   font-weight: 700;
   overflow-wrap: anywhere;
@@ -474,6 +479,14 @@ select:disabled {
   grid-template-columns: 1fr 1fr;
   gap: 0.75rem;
   margin-top: 1rem;
+}
+
+.box-qr-panel {
+  margin-top: 1rem;
+}
+
+.box-qr-panel .qr-join-card {
+  margin-bottom: 0;
 }
 
 .box-settings-layout {
@@ -770,8 +783,11 @@ select:disabled {
 
 .print-brand,
 .print-title,
+.print-source-name,
+.print-venue-name,
 .print-room-code,
-.print-instruction {
+.print-instruction,
+.print-sub-instruction {
   display: none;
 }
 
@@ -942,8 +958,11 @@ audio {
 
   .print-brand,
   .print-title,
+  .print-source-name,
+  .print-venue-name,
   .print-room-code,
-  .print-instruction {
+  .print-instruction,
+  .print-sub-instruction {
     display: block;
   }
 
@@ -955,6 +974,16 @@ audio {
   .print-title {
     font-size: 22pt;
     font-weight: 700;
+  }
+
+  .print-source-name {
+    font-size: 18pt;
+    font-weight: 700;
+  }
+
+  .print-venue-name {
+    color: #374151;
+    font-size: 14pt;
   }
 
   .print-room-code {
@@ -969,6 +998,11 @@ audio {
 
   .print-instruction {
     font-size: 16pt;
+  }
+
+  .print-sub-instruction {
+    color: #374151;
+    font-size: 12pt;
   }
 
   .print-room-qr .qr-box {

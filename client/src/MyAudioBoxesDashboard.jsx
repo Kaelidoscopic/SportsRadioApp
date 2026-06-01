@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import QRJoinScreen from "./QRJoinScreen";
 
 const authTokenKey = "sportsAudioAuthToken";
 const authUserKey = "sportsAudioAuthUser";
@@ -35,13 +36,28 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
   const [pairingCode, setPairingCode] = useState("");
   const [boxes, setBoxes] = useState([]);
   const [selectedBoxId, setSelectedBoxId] = useState("");
+  const [visibleQrBoxId, setVisibleQrBoxId] = useState("");
+  const [printBoxId, setPrintBoxId] = useState("");
   const [edits, setEdits] = useState({});
   const [message, setMessage] = useState("Log in or sign up to manage your audio boxes.");
   const [setupRequired, setSetupRequired] = useState(false);
   const apiUrl = getApiUrl();
+  const frontendUrl =
+    import.meta.env.VITE_FRONTEND_URL || window.location.origin;
 
   const selectedBox = boxes.find((box) => box.applianceId === selectedBoxId);
+  const printBox = boxes.find((box) => box.applianceId === printBoxId);
   const isUnlocked = Boolean(token && user) || adminUnlocked;
+
+  const getJoinUrl = (box) => {
+    if (!box?.roomCode) return "";
+    return `${frontendUrl}/?room=${encodeURIComponent(box.roomCode)}`;
+  };
+
+  const getBoxSourceName = (box) =>
+    box?.displayName || box?.roomName || box?.applianceId || "Audio Box";
+
+  const getVenueName = () => user?.displayName || "SyncLink Venue";
 
   const request = useCallback(
     async (path, options = {}) => {
@@ -169,6 +185,14 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
     };
   }, [isUnlocked, refreshBoxes]);
 
+  useEffect(() => {
+    const clearPrintBox = () => setPrintBoxId("");
+
+    window.addEventListener("afterprint", clearPrintBox);
+
+    return () => window.removeEventListener("afterprint", clearPrintBox);
+  }, []);
+
   const submitAuth = async () => {
     try {
       const path = authMode === "signup" ? "/api/auth/signup" : "/api/auth/login";
@@ -264,11 +288,61 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
     }
   };
 
+  const toggleBoxQr = (box) => {
+    if (!box.roomCode) {
+      setMessage("Set a room code before showing a QR code.");
+      return;
+    }
+
+    setVisibleQrBoxId((current) =>
+      current === box.applianceId ? "" : box.applianceId
+    );
+  };
+
+  const printQrForBox = (box) => {
+    if (!box.roomCode) {
+      setMessage("Set a room code before printing a QR code.");
+      return;
+    }
+
+    setPrintBoxId(box.applianceId);
+    window.setTimeout(() => window.print(), 0);
+  };
+
+  const renderPrintableSign = (box) => {
+    if (!box) return null;
+
+    return (
+      <div className="print-room-qr box-print-sign" aria-hidden="true">
+        <div className="print-brand">SyncLink</div>
+        <div className="print-title">Listen to this TV Audio</div>
+        <div className="print-source-name">{getBoxSourceName(box)}</div>
+        <div className="print-venue-name">{getVenueName()}</div>
+        <QRJoinScreen roomCode={box.roomCode} joinUrl={getJoinUrl(box)} variant="print" />
+        <div className="print-room-code">{box.roomCode}</div>
+        <div className="print-instruction">
+          Scan this QR code or enter the room code to listen.
+        </div>
+        <div className="print-sub-instruction">
+          Open SyncLink - Join Audio - Enter Room Code
+        </div>
+      </div>
+    );
+  };
+
   const renderBoxCard = (box) => (
-    <button
+    <div
       className="smart-box-card"
       key={box.applianceId}
       onClick={() => setSelectedBoxId(box.applianceId)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          setSelectedBoxId(box.applianceId);
+        }
+      }}
     >
       <div className="smart-box-topline">
         <span className="smart-box-name">{box.displayName || box.applianceId}</span>
@@ -287,6 +361,20 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
       </div>
 
       <div className="smart-box-actions" onClick={(event) => event.stopPropagation()}>
+        <button
+          className="secondary-button"
+          onClick={() => toggleBoxQr(box)}
+          disabled={!box.roomCode}
+        >
+          {visibleQrBoxId === box.applianceId ? "Hide QR Code" : "Show QR Code"}
+        </button>
+        <button
+          className="secondary-button"
+          onClick={() => printQrForBox(box)}
+          disabled={!box.roomCode}
+        >
+          Print QR Code
+        </button>
         <button
           className="secondary-button"
           onClick={() =>
@@ -314,7 +402,13 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
           {box.isRoomActive ? "Deactivate" : "Activate"}
         </button>
       </div>
-    </button>
+
+      {visibleQrBoxId === box.applianceId && (
+        <div className="box-qr-panel" onClick={(event) => event.stopPropagation()}>
+          <QRJoinScreen roomCode={box.roomCode} joinUrl={getJoinUrl(box)} />
+        </div>
+      )}
+    </div>
   );
 
   const authPanel = (
@@ -523,6 +617,20 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
 
             <div className="share-actions">
               <button
+                className="secondary-button"
+                onClick={() => toggleBoxQr(selectedBox)}
+                disabled={!selectedBox.roomCode}
+              >
+                {visibleQrBoxId === selectedBox.applianceId ? "Hide QR Code" : "Show QR Code"}
+              </button>
+              <button
+                className="secondary-button"
+                onClick={() => printQrForBox(selectedBox)}
+                disabled={!selectedBox.roomCode}
+              >
+                Print QR Code
+              </button>
+              <button
                 className="primary-button"
                 onClick={() =>
                   sendCommand(selectedBox.applianceId, "start-audio", "Audio start command sent.")
@@ -559,6 +667,13 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
                 Deactivate Room
               </button>
             </div>
+
+            {visibleQrBoxId === selectedBox.applianceId && (
+              <div className="panel-card">
+                <h2 className="section-title">Room QR Code</h2>
+                <QRJoinScreen roomCode={selectedBox.roomCode} joinUrl={getJoinUrl(selectedBox)} />
+              </div>
+            )}
 
             <div className="panel-card">
               <h2 className="section-title">Diagnostics</h2>
@@ -624,6 +739,8 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
             </div>
           </>
         )}
+
+        {renderPrintableSign(printBox)}
       </div>
     </div>
   );
