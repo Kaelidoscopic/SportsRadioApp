@@ -39,7 +39,7 @@ function HostDashboard({
       joinUrl: joinLink
     };
     const storageKey = `${printPayloadPrefix}${printId}`;
-    const printUrl = `/print/box/${encodeURIComponent(printId)}`;
+    const printUrl = `/print/box/${encodeURIComponent(printId)}?print=true`;
 
     sessionStorage.setItem(storageKey, JSON.stringify(payload));
     localStorage.setItem(storageKey, JSON.stringify(payload));

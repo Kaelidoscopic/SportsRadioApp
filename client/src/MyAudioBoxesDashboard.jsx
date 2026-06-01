@@ -1,6 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import QRJoinScreen from "./QRJoinScreen";
-
 const authTokenKey = "sportsAudioAuthToken";
 const authUserKey = "sportsAudioAuthUser";
 const printPayloadPrefix = "sportsAudioPrintBox:";
@@ -37,7 +35,6 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
   const [pairingCode, setPairingCode] = useState("");
   const [boxes, setBoxes] = useState([]);
   const [selectedBoxId, setSelectedBoxId] = useState("");
-  const [visibleQrBoxId, setVisibleQrBoxId] = useState("");
   const [edits, setEdits] = useState({});
   const [message, setMessage] = useState("Log in or sign up to manage your audio boxes.");
   const [setupRequired, setSetupRequired] = useState(false);
@@ -279,20 +276,9 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
     }
   };
 
-  const toggleBoxQr = (box) => {
+  const openQrPageForBox = (box, autoPrint = false) => {
     if (!box.roomCode) {
-      setMessage("Set a room code before showing a QR code.");
-      return;
-    }
-
-    setVisibleQrBoxId((current) =>
-      current === box.applianceId ? "" : box.applianceId
-    );
-  };
-
-  const printQrForBox = (box) => {
-    if (!box.roomCode) {
-      setMessage("Set a room code before printing a QR code.");
+      setMessage("Set a room code before opening a QR code.");
       return;
     }
 
@@ -304,7 +290,9 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
       joinUrl: getJoinUrl(box)
     };
     const storageKey = `${printPayloadPrefix}${box.applianceId}`;
-    const printUrl = `/print/box/${encodeURIComponent(box.applianceId)}`;
+    const printUrl = `/print/box/${encodeURIComponent(box.applianceId)}${
+      autoPrint ? "?print=true" : ""
+    }`;
 
     sessionStorage.setItem(storageKey, JSON.stringify(payload));
     localStorage.setItem(storageKey, JSON.stringify(payload));
@@ -349,14 +337,14 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
       <div className="smart-box-actions" onClick={(event) => event.stopPropagation()}>
         <button
           className="secondary-button"
-          onClick={() => toggleBoxQr(box)}
+          onClick={() => openQrPageForBox(box)}
           disabled={!box.roomCode}
         >
-          {visibleQrBoxId === box.applianceId ? "Hide QR Code" : "Show QR Code"}
+          Show QR Code
         </button>
         <button
           className="secondary-button"
-          onClick={() => printQrForBox(box)}
+          onClick={() => openQrPageForBox(box, true)}
           disabled={!box.roomCode}
         >
           Print QR Code
@@ -389,11 +377,6 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
         </button>
       </div>
 
-      {visibleQrBoxId === box.applianceId && (
-        <div className="box-qr-panel" onClick={(event) => event.stopPropagation()}>
-          <QRJoinScreen roomCode={box.roomCode} joinUrl={getJoinUrl(box)} />
-        </div>
-      )}
     </div>
   );
 
@@ -604,14 +587,14 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
             <div className="share-actions">
               <button
                 className="secondary-button"
-                onClick={() => toggleBoxQr(selectedBox)}
+                onClick={() => openQrPageForBox(selectedBox)}
                 disabled={!selectedBox.roomCode}
               >
-                {visibleQrBoxId === selectedBox.applianceId ? "Hide QR Code" : "Show QR Code"}
+                Show QR Code
               </button>
               <button
                 className="secondary-button"
-                onClick={() => printQrForBox(selectedBox)}
+                onClick={() => openQrPageForBox(selectedBox, true)}
                 disabled={!selectedBox.roomCode}
               >
                 Print QR Code
@@ -653,13 +636,6 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
                 Deactivate Room
               </button>
             </div>
-
-            {visibleQrBoxId === selectedBox.applianceId && (
-              <div className="panel-card">
-                <h2 className="section-title">Room QR Code</h2>
-                <QRJoinScreen roomCode={selectedBox.roomCode} joinUrl={getJoinUrl(selectedBox)} />
-              </div>
-            )}
 
             <div className="panel-card">
               <h2 className="section-title">Diagnostics</h2>

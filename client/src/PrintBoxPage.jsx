@@ -38,6 +38,8 @@ function PrintBoxPage() {
   const boxId = decodeURIComponent(
     window.location.pathname.replace(/^\/print\/box\//, "").split("/")[0] || ""
   );
+  const shouldAutoPrint =
+    new URLSearchParams(window.location.search).get("print") === "true";
   const frontendUrl =
     import.meta.env.VITE_FRONTEND_URL || window.location.origin;
   const storageKey = useMemo(() => `${printPayloadPrefix}${boxId}`, [boxId]);
@@ -84,18 +86,36 @@ function PrintBoxPage() {
   }, [boxId, frontendUrl, payload]);
 
   useEffect(() => {
-    if (!payload?.roomCode || !payload?.joinUrl) return undefined;
+    if (!shouldAutoPrint || !payload?.roomCode || !payload?.joinUrl) return undefined;
 
     const printTimer = window.setTimeout(() => {
       window.print();
     }, 450);
 
     return () => window.clearTimeout(printTimer);
-  }, [payload]);
+  }, [payload, shouldAutoPrint]);
+
+  const goBackToDashboard = () => {
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+
+    window.location.assign("/");
+  };
 
   if (message) {
     return (
       <main className="print-page">
+        <div className="print-page-actions">
+          <button className="secondary-button" onClick={goBackToDashboard}>
+            Back to Dashboard
+          </button>
+          <button className="primary-button" onClick={() => window.print()}>
+            Print QR Code
+          </button>
+        </div>
+
         <section className="print-sign-card">
           <div className="print-brand visible-print-text">SyncLink</div>
           <p className="print-message">{message}</p>
@@ -106,6 +126,15 @@ function PrintBoxPage() {
 
   return (
     <main className="print-page">
+      <div className="print-page-actions">
+        <button className="secondary-button" onClick={goBackToDashboard}>
+          Back to Dashboard
+        </button>
+        <button className="primary-button" onClick={() => window.print()}>
+          Print QR Code
+        </button>
+      </div>
+
       <section className="print-sign-card">
         <div className="print-brand visible-print-text">SyncLink</div>
         <h1 className="print-title visible-print-text">Listen to this TV Audio</h1>
@@ -123,10 +152,6 @@ function PrintBoxPage() {
         <p className="print-sub-instruction visible-print-text">
           Open SyncLink - Join Audio - Enter Room Code
         </p>
-
-        <button className="secondary-button print-again-button" onClick={() => window.print()}>
-          Print QR Code
-        </button>
       </section>
     </main>
   );

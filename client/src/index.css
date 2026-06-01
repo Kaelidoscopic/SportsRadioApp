@@ -481,14 +481,6 @@ select:disabled {
   margin-top: 1rem;
 }
 
-.box-qr-panel {
-  margin-top: 1rem;
-}
-
-.box-qr-panel .qr-join-card {
-  margin-bottom: 0;
-}
-
 .box-settings-layout {
   display: flex;
   flex-direction: column;
@@ -881,6 +873,18 @@ audio {
   padding: 0.4in;
 }
 
+.print-page-actions {
+  position: fixed;
+  left: 50%;
+  top: 1rem;
+  z-index: 10;
+  width: min(420px, calc(100vw - 2rem));
+  transform: translateX(-50%);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
 .print-sign-card {
   width: min(100%, 7.25in);
   min-height: 9.5in;
@@ -954,11 +958,6 @@ audio {
   margin: 0;
 }
 
-.print-again-button {
-  max-width: 260px;
-  margin-top: 0.15in;
-}
-
 @media (max-width: 700px) {
   .page-shell {
     padding: 1rem;
@@ -999,6 +998,25 @@ audio {
     justify-items: center;
     text-align: center;
   }
+
+  .print-page {
+    align-items: flex-start;
+    padding: 5.25rem 1rem 1rem;
+  }
+
+  .print-sign-card {
+    min-height: auto;
+    padding: 1.25rem;
+  }
+
+  .print-page-qr-box svg {
+    width: 240px;
+    height: 240px;
+  }
+
+  .print-room-code {
+    font-size: 2.4rem;
+  }
 }
 
 @media print {
@@ -1011,6 +1029,10 @@ audio {
     padding: 0;
   }
 
+  .print-page-actions {
+    display: none;
+  }
+
   .print-sign-card {
     border: none;
     border-radius: 0;
@@ -1019,7 +1041,4 @@ audio {
     padding: 0;
   }
 
-  .print-again-button {
-    display: none;
-  }
 }
