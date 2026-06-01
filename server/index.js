@@ -1,5 +1,6 @@
 const express = require("express");
 const http = require("http");
+const crypto = require("crypto");
 const cors = require("cors");
 const { Server } = require("socket.io");
 require("dotenv").config();
@@ -23,8 +24,72 @@ const APPLIANCE_OFFLINE_AFTER_MS = 10000;
 const appliances = {};
 const applianceSockets = {};
 const adminSockets = new Set();
+const users = {};
+const usersByEmail = {};
+const sessions = {};
 
 const nowIso = () => new Date().toISOString();
+
+const normalizeEmail = (email) => String(email || "").trim().toLowerCase();
+
+const hashPassword = (password, salt = crypto.randomBytes(16).toString("hex")) => {
+  const hash = crypto
+    .pbkdf2Sync(String(password || ""), salt, 100000, 64, "sha512")
+    .toString("hex");
+
+  return { salt, hash };
+};
+
+const verifyPassword = (password, passwordRecord) => {
+  if (!passwordRecord?.salt || !passwordRecord?.hash) return false;
+
+  const next = hashPassword(password, passwordRecord.salt);
+  return crypto.timingSafeEqual(
+    Buffer.from(next.hash, "hex"),
+    Buffer.from(passwordRecord.hash, "hex")
+  );
+};
+
+const toUserDto = (user) => ({
+  userId: user.userId,
+  email: user.email,
+  displayName: user.displayName,
+  createdAt: user.createdAt
+});
+
+const createSession = (userId) => {
+  const token = crypto.randomBytes(32).toString("hex");
+  sessions[token] = {
+    token,
+    userId,
+    createdAt: nowIso()
+  };
+  return token;
+};
+
+const getAuthUser = (req) => {
+  const authHeader = String(req.get("authorization") || "");
+
+  if (!authHeader.toLowerCase().startsWith("bearer ")) return null;
+
+  const token = authHeader.slice(7).trim();
+  const session = sessions[token];
+
+  if (!session) return null;
+
+  return users[session.userId] || null;
+};
+
+const requireAuthUser = (req, res) => {
+  const user = getAuthUser(req);
+
+  if (!user) {
+    res.status(401).json({ error: "Login is required." });
+    return null;
+  }
+
+  return user;
+};
 
 const getAdminPin = () => process.env.ADMIN_PIN || process.env.SPORTSYNC_ADMIN_PIN || "";
 
@@ -84,6 +149,9 @@ const createOrUpdateManagedAppliance = (payload = {}, socketId = null) => {
 
   appliances[applianceId] = {
     applianceId,
+    ownerUserId: existing.ownerUserId || payload.ownerUserId || null,
+    pairingCode:
+      payload.pairingCode || existing.pairingCode || String(applianceId).toUpperCase(),
     displayName: payload.displayName || payload.name || existing.displayName || applianceId,
     roomCode,
     roomName: payload.roomName || existing.roomName || roomCode,
@@ -115,6 +183,7 @@ const toApplianceDto = (appliance) => {
 
   return {
     applianceId: appliance.applianceId,
+    ownerUserId: appliance.ownerUserId || null,
     displayName: appliance.displayName,
     roomCode: appliance.roomCode,
     roomName: appliance.roomName,
@@ -927,6 +996,270 @@ const sendAdminApplianceCommand = (res, appliance, eventName, payload = {}) => {
   return true;
 };
 
+const getOwnedAppliance = (req, res, user) => {
+  const appliance = getManagedAppliance(req.params.applianceId);
+
+  if (!appliance || appliance.ownerUserId !== user.userId) {
+    res.status(404).json({ error: "Appliance not found." });
+    return null;
+  }
+
+  return appliance;
+};
+
+const sendOwnerApplianceCommand = (res, appliance, eventName, payload = {}) => {
+  const delivered = sendCommandToAppliance(
+    appliance.applianceId,
+    eventName,
+    payload
+  );
+
+  if (!delivered) {
+    res.status(409).json({
+      error: "Appliance is offline. Command was not delivered.",
+      appliance: toApplianceDto(appliance)
+    });
+    return false;
+  }
+
+  return true;
+};
+
+const readApplianceSettingUpdates = (body = {}, currentAppliance, res) => {
+  const updates = {};
+
+  if (typeof body.displayName === "string") {
+    updates.displayName = body.displayName.trim() || currentAppliance.displayName;
+  }
+
+  if (typeof body.roomName === "string") {
+    updates.roomName = body.roomName.trim() || currentAppliance.roomName;
+  }
+
+  if (typeof body.roomCode === "string") {
+    const nextRoomCode = sanitizeRoomCode(body.roomCode);
+
+    if (!nextRoomCode) {
+      res.status(400).json({ error: "Room code is required." });
+      return null;
+    }
+
+    updates.roomCode = nextRoomCode;
+  }
+
+  if (typeof body.isPublic === "boolean") {
+    updates.isPublic = body.isPublic;
+  }
+
+  return updates;
+};
+
+app.post("/api/auth/signup", (req, res) => {
+  const email = normalizeEmail(req.body?.email);
+  const password = String(req.body?.password || "");
+  const displayName = String(req.body?.displayName || "").trim() || email;
+
+  if (!email || !password) {
+    res.status(400).json({ error: "Email and password are required." });
+    return;
+  }
+
+  if (password.length < 6) {
+    res.status(400).json({ error: "Password must be at least 6 characters." });
+    return;
+  }
+
+  if (usersByEmail[email]) {
+    res.status(409).json({ error: "An account already exists for that email." });
+    return;
+  }
+
+  const userId = `user_${crypto.randomBytes(8).toString("hex")}`;
+  const timestamp = nowIso();
+  const user = {
+    userId,
+    email,
+    displayName,
+    password: hashPassword(password),
+    createdAt: timestamp,
+    updatedAt: timestamp
+  };
+
+  users[userId] = user;
+  usersByEmail[email] = userId;
+
+  const token = createSession(userId);
+  res.status(201).json({ token, user: toUserDto(user) });
+});
+
+app.post("/api/auth/login", (req, res) => {
+  const email = normalizeEmail(req.body?.email);
+  const password = String(req.body?.password || "");
+  const user = users[usersByEmail[email]];
+
+  if (!user || !verifyPassword(password, user.password)) {
+    res.status(401).json({ error: "Invalid email or password." });
+    return;
+  }
+
+  const token = createSession(user.userId);
+  res.json({ token, user: toUserDto(user) });
+});
+
+app.get("/api/auth/me", (req, res) => {
+  const user = requireAuthUser(req, res);
+  if (!user) return;
+
+  res.json({ user: toUserDto(user) });
+});
+
+app.get("/api/my/appliances", (req, res) => {
+  const user = requireAuthUser(req, res);
+  if (!user) return;
+
+  res.json({
+    appliances: Object.values(appliances)
+      .filter((appliance) => appliance.ownerUserId === user.userId)
+      .map(toApplianceDto)
+  });
+});
+
+app.post("/api/my/appliances/link", (req, res) => {
+  const user = requireAuthUser(req, res);
+  if (!user) return;
+
+  const pairingCode = String(req.body?.pairingCode || "").trim().toUpperCase();
+
+  if (!pairingCode) {
+    res.status(400).json({ error: "Pairing code is required." });
+    return;
+  }
+
+  const appliance = Object.values(appliances).find(
+    (candidate) => String(candidate.pairingCode || "").toUpperCase() === pairingCode
+  );
+
+  if (!appliance) {
+    res.status(404).json({ error: "No appliance found for that pairing code." });
+    return;
+  }
+
+  if (appliance.ownerUserId && appliance.ownerUserId !== user.userId) {
+    res.status(409).json({ error: "Appliance is already linked to another user." });
+    return;
+  }
+
+  appliance.ownerUserId = user.userId;
+  appliance.updatedAt = nowIso();
+  emitApplianceList();
+
+  res.json({ appliance: toApplianceDto(appliance) });
+});
+
+app.get("/api/my/appliances/:applianceId", (req, res) => {
+  const user = requireAuthUser(req, res);
+  if (!user) return;
+  const appliance = getOwnedAppliance(req, res, user);
+  if (!appliance) return;
+
+  res.json({ appliance: toApplianceDto(appliance) });
+});
+
+app.patch("/api/my/appliances/:applianceId/settings", (req, res) => {
+  const user = requireAuthUser(req, res);
+  if (!user) return;
+  const appliance = getOwnedAppliance(req, res, user);
+  if (!appliance) return;
+
+  const updates = readApplianceSettingUpdates(req.body, appliance, res);
+  if (!updates) return;
+
+  if (Object.keys(updates).length === 0) {
+    res.json({ appliance: toApplianceDto(appliance), delivered: false });
+    return;
+  }
+
+  if (
+    !sendOwnerApplianceCommand(res, appliance, "appliance:set-settings", {
+      settings: updates
+    })
+  ) {
+    return;
+  }
+
+  Object.assign(appliance, updates, { updatedAt: nowIso() });
+  emitApplianceList();
+  res.json({ appliance: toApplianceDto(appliance), delivered: true });
+});
+
+app.post("/api/my/appliances/:applianceId/start-audio", (req, res) => {
+  const user = requireAuthUser(req, res);
+  if (!user) return;
+  const appliance = getOwnedAppliance(req, res, user);
+  if (!appliance) return;
+
+  if (!sendOwnerApplianceCommand(res, appliance, "appliance:start-audio")) return;
+
+  appliance.isAudioEnabled = true;
+  appliance.isRoomActive = true;
+  appliance.updatedAt = nowIso();
+  emitApplianceList();
+  res.json({ appliance: toApplianceDto(appliance), delivered: true });
+});
+
+app.post("/api/my/appliances/:applianceId/stop-audio", (req, res) => {
+  const user = requireAuthUser(req, res);
+  if (!user) return;
+  const appliance = getOwnedAppliance(req, res, user);
+  if (!appliance) return;
+
+  if (!sendOwnerApplianceCommand(res, appliance, "appliance:stop-audio")) return;
+
+  appliance.isAudioEnabled = false;
+  appliance.updatedAt = nowIso();
+  emitApplianceList();
+  res.json({ appliance: toApplianceDto(appliance), delivered: true });
+});
+
+app.post("/api/my/appliances/:applianceId/activate-room", (req, res) => {
+  const user = requireAuthUser(req, res);
+  if (!user) return;
+  const appliance = getOwnedAppliance(req, res, user);
+  if (!appliance) return;
+
+  if (
+    !sendOwnerApplianceCommand(res, appliance, "appliance:activate-room", {
+      roomCode: appliance.roomCode,
+      roomName: appliance.roomName
+    })
+  ) {
+    return;
+  }
+
+  appliance.isRoomActive = true;
+  appliance.updatedAt = nowIso();
+  emitApplianceList();
+  res.json({ appliance: toApplianceDto(appliance), delivered: true });
+});
+
+app.post("/api/my/appliances/:applianceId/deactivate-room", (req, res) => {
+  const user = requireAuthUser(req, res);
+  if (!user) return;
+  const appliance = getOwnedAppliance(req, res, user);
+  if (!appliance) return;
+
+  if (!sendOwnerApplianceCommand(res, appliance, "appliance:deactivate-room")) {
+    return;
+  }
+
+  appliance.isRoomActive = false;
+  appliance.isAudioEnabled = false;
+  appliance.updatedAt = nowIso();
+  markApplianceOffline(appliance.roomCode, "Owner deactivated appliance room.");
+  emitApplianceList();
+  res.json({ appliance: toApplianceDto(appliance), delivered: true });
+});
+
 app.get("/api/appliances", (req, res) => {
   if (!requireAdminPin(req, res)) return;
 
@@ -946,30 +1279,8 @@ app.patch("/api/appliances/:applianceId/settings", (req, res) => {
   const appliance = getAdminAppliance(req, res);
   if (!appliance) return;
 
-  const updates = {};
-
-  if (typeof req.body?.displayName === "string") {
-    updates.displayName = req.body.displayName.trim() || appliance.displayName;
-  }
-
-  if (typeof req.body?.roomName === "string") {
-    updates.roomName = req.body.roomName.trim() || appliance.roomName;
-  }
-
-  if (typeof req.body?.roomCode === "string") {
-    const nextRoomCode = sanitizeRoomCode(req.body.roomCode);
-
-    if (!nextRoomCode) {
-      res.status(400).json({ error: "Room code is required." });
-      return;
-    }
-
-    updates.roomCode = nextRoomCode;
-  }
-
-  if (typeof req.body?.isPublic === "boolean") {
-    updates.isPublic = req.body.isPublic;
-  }
+  const updates = readApplianceSettingUpdates(req.body, appliance, res);
+  if (!updates) return;
 
   if (Object.keys(updates).length === 0) {
     res.json({ appliance: toApplianceDto(appliance), delivered: false });

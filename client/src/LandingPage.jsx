@@ -14,9 +14,7 @@ function LandingPage({
 }) {
   const [mode, setMode] = useState(null);
   const [scannerOpen, setScannerOpen] = useState(false);
-  const [demoUser, setDemoUser] = useState(
-    localStorage.getItem("sportsAudioDemoUser") || ""
-  );
+  const isLoggedIn = Boolean(localStorage.getItem("sportsAudioAuthToken"));
   const activeMode = mode || preferredMode;
 
   const savedHostCode = localStorage.getItem("venueAudioHostCode") || "";
@@ -78,19 +76,6 @@ function LandingPage({
     window.location.assign("/admin");
   };
 
-  const signInPlaceholder = () => {
-    const userName = "Demo Host";
-    localStorage.setItem("sportsAudioDemoUser", userName);
-    setDemoUser(userName);
-    setMode("boxes");
-  };
-
-  const signOutPlaceholder = () => {
-    localStorage.removeItem("sportsAudioDemoUser");
-    setDemoUser("");
-    setMode("menu");
-  };
-
   if (activeMode === "boxes") {
     return (
       <MyAudioBoxesDashboard
@@ -111,16 +96,15 @@ function LandingPage({
           <div className="brand-block centered-brand">
             <h1 className="app-title">Login / Sign Up</h1>
             <p className="app-subtitle">
-              Account auth arrives in Phase 2. For now, continue into the
-              appliance dashboard with the admin PIN fallback.
+              Create an account or log in to manage linked audio boxes.
             </p>
           </div>
 
           {statusMessage && <div className="status-banner">{statusMessage}</div>}
 
           <div className="compact-actions">
-            <button className="primary-button" onClick={signInPlaceholder}>
-              Continue as Demo Host
+            <button className="primary-button" onClick={() => setMode("boxes")}>
+              Continue
             </button>
 
             <button className="secondary-button" onClick={() => setMode("listener")}>
@@ -178,10 +162,10 @@ function LandingPage({
 
               <button
                 className="primary-button"
-                onClick={() => setMode(demoUser ? "boxes" : "auth")}
+                onClick={() => setMode(isLoggedIn ? "boxes" : "auth")}
                 disabled={!isSocketConnected}
               >
-                {demoUser ? "My Audio Boxes" : "Login / Sign Up"}
+                {isLoggedIn ? "My Audio Boxes" : "Login / Sign Up"}
               </button>
 
               <button
@@ -350,11 +334,11 @@ function LandingPage({
         </div>
 
         <div className="compact-actions">
-          {demoUser ? (
+          {isLoggedIn ? (
             <div className="signed-in-strip">
-              <span>Signed in as {demoUser}</span>
-              <button className="ghost-link-button" onClick={signOutPlaceholder}>
-                Sign Out
+              <span>Signed in</span>
+              <button className="ghost-link-button" onClick={() => setMode("boxes")}>
+                My Boxes
               </button>
             </div>
           ) : (
@@ -366,7 +350,7 @@ function LandingPage({
             </button>
           )}
 
-          {demoUser && (
+          {isLoggedIn && (
             <button
               className="primary-button"
               onClick={() => setMode("boxes")}
@@ -376,7 +360,7 @@ function LandingPage({
           )}
 
           <button
-            className={demoUser ? "secondary-button" : "primary-button"}
+            className={isLoggedIn ? "secondary-button" : "primary-button"}
             onClick={() => {
               if (!roomId && savedHostCode) {
                 setRoomId(savedHostCode);

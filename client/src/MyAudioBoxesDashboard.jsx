@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 
+const authTokenKey = "sportsAudioAuthToken";
+const authUserKey = "sportsAudioAuthUser";
+
 const getApiUrl = () => {
   if (import.meta.env.VITE_BACKEND_URL) return import.meta.env.VITE_BACKEND_URL;
   if (import.meta.env.DEV) return "http://localhost:5000";
@@ -9,19 +12,59 @@ const getApiUrl = () => {
 const cleanRoomCode = (code) =>
   String(code || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
 
+const readSavedUser = () => {
+  try {
+    return JSON.parse(localStorage.getItem(authUserKey) || "null");
+  } catch {
+    return null;
+  }
+};
+
 function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
+  const [token, setToken] = useState(localStorage.getItem(authTokenKey) || "");
+  const [user, setUser] = useState(readSavedUser());
+  const [authMode, setAuthMode] = useState("login");
+  const [authForm, setAuthForm] = useState({
+    displayName: "",
+    email: "",
+    password: ""
+  });
+  const [useAdminFallback, setUseAdminFallback] = useState(false);
   const [pin, setPin] = useState("");
-  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [adminUnlocked, setAdminUnlocked] = useState(false);
+  const [pairingCode, setPairingCode] = useState("");
   const [boxes, setBoxes] = useState([]);
   const [selectedBoxId, setSelectedBoxId] = useState("");
   const [edits, setEdits] = useState({});
-  const [message, setMessage] = useState("Sign in is a Phase 1 placeholder. Use the admin PIN to manage boxes.");
+  const [message, setMessage] = useState("Log in or sign up to manage your audio boxes.");
   const [setupRequired, setSetupRequired] = useState(false);
   const apiUrl = getApiUrl();
 
   const selectedBox = boxes.find((box) => box.applianceId === selectedBoxId);
+  const isUnlocked = Boolean(token && user) || adminUnlocked;
 
-  const adminFetch = useCallback(
+  const request = useCallback(
+    async (path, options = {}) => {
+      const response = await fetch(`${apiUrl}${path}`, {
+        ...options,
+        headers: {
+          "content-type": "application/json",
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+          ...(options.headers || {})
+        }
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || "Request failed.");
+      }
+
+      return data;
+    },
+    [apiUrl, token]
+  );
+
+  const adminRequest = useCallback(
     async (path, options = {}) => {
       const response = await fetch(`${apiUrl}${path}`, {
         ...options,
@@ -44,6 +87,26 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
     [apiUrl, pin]
   );
 
+  const activeRequest = useAdminFallback ? adminRequest : request;
+  const applianceBasePath = useAdminFallback ? "/api/appliances" : "/api/my/appliances";
+
+  const saveSession = useCallback((nextToken, nextUser) => {
+    localStorage.setItem(authTokenKey, nextToken);
+    localStorage.setItem(authUserKey, JSON.stringify(nextUser));
+    setToken(nextToken);
+    setUser(nextUser);
+  }, []);
+
+  const clearSession = useCallback(() => {
+    localStorage.removeItem(authTokenKey);
+    localStorage.removeItem(authUserKey);
+    setToken("");
+    setUser(null);
+    setBoxes([]);
+    setSelectedBoxId("");
+    setMessage("Signed out.");
+  }, []);
+
   const syncEdits = (nextBoxes) => {
     setEdits((current) => {
       const next = { ...current };
@@ -64,36 +127,105 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
   };
 
   const refreshBoxes = useCallback(async () => {
-    const data = await adminFetch("/api/appliances");
+    const data = await activeRequest(applianceBasePath);
     const nextBoxes = data.appliances || [];
 
     setBoxes(nextBoxes);
     syncEdits(nextBoxes);
-    setIsUnlocked(true);
     setMessage(
       nextBoxes.length
         ? "My Audio Boxes loaded."
-        : "No boxes have checked in yet."
+        : useAdminFallback
+          ? "No boxes have checked in yet."
+          : "No boxes linked yet. Enter a pairing code to add one."
     );
-  }, [adminFetch]);
+  }, [activeRequest, applianceBasePath, useAdminFallback]);
+
+  useEffect(() => {
+    if (!token) return;
+
+    request("/api/auth/me")
+      .then((data) => {
+        saveSession(token, data.user);
+      })
+      .catch(() => {
+        clearSession();
+      });
+  }, [clearSession, request, saveSession, token]);
 
   useEffect(() => {
     if (!isUnlocked) return undefined;
 
+    const refreshTimer = window.setTimeout(() => {
+      refreshBoxes().catch((error) => setMessage(error.message));
+    }, 0);
     const timer = window.setInterval(() => {
       refreshBoxes().catch((error) => setMessage(error.message));
     }, 5000);
 
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearTimeout(refreshTimer);
+      window.clearInterval(timer);
+    };
   }, [isUnlocked, refreshBoxes]);
 
-  const unlock = () => {
+  const submitAuth = async () => {
+    try {
+      const path = authMode === "signup" ? "/api/auth/signup" : "/api/auth/login";
+      const data = await request(path, {
+        method: "POST",
+        body: JSON.stringify(authForm)
+      });
+
+      saveSession(data.token, data.user);
+      setMessage(`Signed in as ${data.user.email}.`);
+      setUseAdminFallback(false);
+      setAdminUnlocked(false);
+      setBoxes([]);
+    } catch (error) {
+      setMessage(error.message);
+    }
+  };
+
+  const unlockAdminFallback = () => {
     if (!pin.trim()) {
       setMessage("Enter the admin PIN.");
       return;
     }
 
-    refreshBoxes().catch((error) => setMessage(error.message));
+    setUseAdminFallback(true);
+    adminRequest("/api/appliances")
+      .then((data) => {
+        setAdminUnlocked(true);
+        setBoxes(data.appliances || []);
+        syncEdits(data.appliances || []);
+        setMessage("Admin fallback unlocked.");
+      })
+      .catch((error) => {
+        setAdminUnlocked(false);
+        setMessage(error.message);
+      });
+  };
+
+  const linkBox = async () => {
+    try {
+      const cleanPairingCode = pairingCode.trim().toUpperCase();
+
+      if (!cleanPairingCode) {
+        setMessage("Enter the pairing code shown by the Pi.");
+        return;
+      }
+
+      await request("/api/my/appliances/link", {
+        method: "POST",
+        body: JSON.stringify({ pairingCode: cleanPairingCode })
+      });
+      setPairingCode("");
+      setMessage("Box linked to your account.");
+      await refreshBoxes();
+    } catch (error) {
+      setMessage(error.message);
+    }
   };
 
   const updateEdit = (applianceId, key, value) => {
@@ -108,7 +240,7 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
 
   const saveSettings = async (applianceId) => {
     try {
-      await adminFetch(`/api/appliances/${applianceId}/settings`, {
+      await activeRequest(`${applianceBasePath}/${applianceId}/settings`, {
         method: "PATCH",
         body: JSON.stringify(edits[applianceId] || {})
       });
@@ -121,7 +253,7 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
 
   const sendCommand = async (applianceId, action, successMessage) => {
     try {
-      await adminFetch(`/api/appliances/${applianceId}/${action}`, {
+      await activeRequest(`${applianceBasePath}/${applianceId}/${action}`, {
         method: "POST",
         body: JSON.stringify({})
       });
@@ -146,7 +278,6 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
       </div>
 
       <span className="room-list-name">{box.roomName || "Audio Room"}</span>
-
       <div className="smart-box-code">{box.roomCode || "----"}</div>
 
       <div className="smart-box-stats">
@@ -186,6 +317,94 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
     </button>
   );
 
+  const authPanel = (
+    <div className="panel-card auth-panel">
+      <h2 className="section-title">{authMode === "signup" ? "Sign Up" : "Log In"}</h2>
+      <p className="small-note">
+        Create an account, then link your Pi audio box with its pairing code.
+      </p>
+
+      {authMode === "signup" && (
+        <input
+          className="room-input"
+          placeholder="Display name"
+          value={authForm.displayName}
+          onChange={(event) =>
+            setAuthForm((current) => ({
+              ...current,
+              displayName: event.target.value
+            }))
+          }
+        />
+      )}
+
+      <input
+        className="room-input"
+        type="email"
+        placeholder="Email"
+        value={authForm.email}
+        onChange={(event) =>
+          setAuthForm((current) => ({ ...current, email: event.target.value }))
+        }
+      />
+
+      <input
+        className="room-input"
+        type="password"
+        placeholder="Password"
+        value={authForm.password}
+        onChange={(event) =>
+          setAuthForm((current) => ({
+            ...current,
+            password: event.target.value
+          }))
+        }
+        onKeyDown={(event) => {
+          if (event.key === "Enter") submitAuth();
+        }}
+      />
+
+      <button className="primary-button" onClick={submitAuth}>
+        {authMode === "signup" ? "Create Account" : "Log In"}
+      </button>
+
+      <button
+        className="ghost-button"
+        onClick={() => setAuthMode(authMode === "signup" ? "login" : "signup")}
+      >
+        {authMode === "signup"
+          ? "Already have an account?"
+          : "Need an account?"}
+      </button>
+
+      <div className="host-mode-divider">
+        <span>Fallback</span>
+      </div>
+
+      {setupRequired && (
+        <p className="small-warning">
+          Set ADMIN_PIN in the backend environment, then restart the backend.
+        </p>
+      )}
+
+      <input
+        className="room-input compact-input"
+        type="password"
+        placeholder="Admin PIN"
+        value={pin}
+        onChange={(event) => setPin(event.target.value)}
+      />
+
+      <button
+        className="secondary-button"
+        onClick={unlockAdminFallback}
+        disabled={!isSocketConnected}
+      >
+        Use Admin PIN Fallback
+      </button>
+    </div>
+  );
+
   return (
     <div className="page-shell">
       <div className="main-card boxes-dashboard-card">
@@ -214,44 +433,10 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
         )}
 
         {!isUnlocked ? (
-          <div className="panel-card auth-panel">
-            <h2 className="section-title">Login / Sign Up</h2>
-            <p className="small-note">
-              Full accounts come in Phase 2. For Phase 1, unlock appliance
-              management with the backend admin PIN.
-            </p>
-
-            {setupRequired && (
-              <p className="small-warning">
-                Set ADMIN_PIN in the backend environment, then restart the backend.
-              </p>
-            )}
-
-            <input
-              className="room-input compact-input"
-              type="password"
-              placeholder="Admin PIN"
-              value={pin}
-              onChange={(event) => setPin(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") unlock();
-              }}
-            />
-
-            <button
-              className="primary-button"
-              onClick={unlock}
-              disabled={!isSocketConnected}
-            >
-              Open My Audio Boxes
-            </button>
-          </div>
+          authPanel
         ) : selectedBox ? (
           <div className="box-settings-layout">
-            <button
-              className="ghost-button"
-              onClick={() => setSelectedBoxId("")}
-            >
+            <button className="ghost-button" onClick={() => setSelectedBoxId("")}>
               All Boxes
             </button>
 
@@ -379,6 +564,7 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
               <h2 className="section-title">Diagnostics</h2>
               <div className="diagnostic-list">
                 <span>ID: {selectedBox.applianceId}</span>
+                <span>Owner: {selectedBox.ownerUserId ? "Linked to account" : "Unlinked"}</span>
                 <span>Last heartbeat: {selectedBox.lastHeartbeat ? new Date(selectedBox.lastHeartbeat).toLocaleString() : "Never"}</span>
                 <span>Current audio device: reported by Pi logs</span>
                 <span>Uptime: tracked by appliance service</span>
@@ -387,11 +573,35 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
           </div>
         ) : (
           <>
+            {!useAdminFallback && (
+              <div className="panel-card">
+                <div className="section-heading-row">
+                  <div>
+                    <span className="metric-label">Link Box</span>
+                    <h2 className="section-title">Pair A Purchased Box</h2>
+                  </div>
+                </div>
+                <div className="inline-control-row">
+                  <input
+                    className="room-input compact-input"
+                    placeholder="Pairing code"
+                    value={pairingCode}
+                    onChange={(event) => setPairingCode(event.target.value.toUpperCase())}
+                  />
+                  <button className="secondary-button" onClick={linkBox}>
+                    Link Box
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="boxes-grid">
               {boxes.length === 0 ? (
                 <div className="panel-card">
                   <p className="small-note">
-                    No boxes are registered yet. Start the Pi appliance and refresh.
+                    {useAdminFallback
+                      ? "No boxes are registered yet. Start the Pi appliance and refresh."
+                      : "No boxes linked yet. Enter your pairing code to add one."}
                   </p>
                 </div>
               ) : (
@@ -399,9 +609,19 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
               )}
             </div>
 
-            <button className="ghost-button" onClick={() => refreshBoxes().catch((error) => setMessage(error.message))}>
-              Refresh Boxes
-            </button>
+            <div className="share-actions">
+              <button
+                className="ghost-button"
+                onClick={() => refreshBoxes().catch((error) => setMessage(error.message))}
+              >
+                Refresh Boxes
+              </button>
+              {!useAdminFallback && (
+                <button className="secondary-button" onClick={clearSession}>
+                  Sign Out
+                </button>
+              )}
+            </div>
           </>
         )}
       </div>

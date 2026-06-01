@@ -74,12 +74,12 @@ When the admin changes settings or toggles audio/room state, `pi-host.js` update
 
 ## Admin Controls
 
-Phase 1 has two admin PIN entry points:
+Phase 2 has two control paths:
 
-- Host Audio -> Login / Sign Up -> My Audio Boxes
-- `/admin`
+- Host Audio -> Login / Sign Up -> My Audio Boxes for user-owned boxes
+- `/admin` for ADMIN_PIN fallback control
 
-The Login / Sign Up screen is a placeholder until real account auth is added. Both entry points use the same admin PIN-protected appliance registry.
+Users can link boxes by pairing code. The `/admin` page remains available when account ownership is not set up yet or a box needs fallback service control.
 
 After entering the admin PIN, each appliance card shows:
 
@@ -113,6 +113,25 @@ All routes require the admin PIN in `x-admin-pin` or `Authorization: Bearer <pin
 - `POST /api/appliances/:applianceId/stop-audio`
 - `POST /api/appliances/:applianceId/activate-room`
 - `POST /api/appliances/:applianceId/deactivate-room`
+
+## User-Owned Box API
+
+Account routes:
+
+- `POST /api/auth/signup`
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+
+Owner routes require `Authorization: Bearer <token>`:
+
+- `GET /api/my/appliances`
+- `POST /api/my/appliances/link`
+- `GET /api/my/appliances/:applianceId`
+- `PATCH /api/my/appliances/:applianceId/settings`
+- `POST /api/my/appliances/:applianceId/start-audio`
+- `POST /api/my/appliances/:applianceId/stop-audio`
+- `POST /api/my/appliances/:applianceId/activate-room`
+- `POST /api/my/appliances/:applianceId/deactivate-room`
 
 ## Expected Behavior
 

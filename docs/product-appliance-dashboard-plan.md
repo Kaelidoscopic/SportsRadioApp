@@ -69,13 +69,16 @@ Implemented as UI structure plus admin PIN controls:
 
 ## Phase 2
 
-Add real auth and ownership:
+Phase 2 adds the first real account and ownership layer:
 
-- sign up/log in
-- persistent users
+- sign up/log in with email and password
+- session token stored by the browser
 - user-owned boxes
-- pairing-code or QR box linking
-- remove admin PIN from normal host workflow
+- pairing-code box linking
+- owner-scoped appliance settings and controls
+- admin PIN remains available as a fallback
+
+Current implementation note: users, sessions, and ownership live in backend memory until a database is added. Restarting the backend clears account and ownership data, but does not break the Pi's HOME appliance room flow.
 
 ## Phase 3
 

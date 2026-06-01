@@ -14,6 +14,7 @@ const CONFIG_PATH =
 const DEFAULT_CONFIG = {
   applianceId: process.env.SPORTSYNC_APPLIANCE_ID || "HOUSE_BOX_1",
   displayName: process.env.SPORTSYNC_APPLIANCE_NAME || "House Box 1",
+  pairingCode: process.env.SPORTSYNC_PAIRING_CODE || "HOUSE-5235",
   roomCode: (process.env.SPORTSYNC_ROOM_CODE || "HOME").toUpperCase(),
   roomName: process.env.SPORTSYNC_ROOM_NAME || "Home Audio",
   audioDevice: process.env.SPORTSYNC_AUDIO_DEVICE || "auto",
@@ -68,6 +69,7 @@ if (!fs.existsSync(CONFIG_PATH)) {
 
 let applianceId = applianceConfigState.applianceId;
 let displayName = applianceConfigState.displayName || applianceId;
+let pairingCode = applianceConfigState.pairingCode || String(applianceId).toUpperCase();
 let roomCode = applianceConfigState.roomCode || "HOME";
 let roomName = applianceConfigState.roomName || roomCode;
 let audioDeviceSetting = applianceConfigState.audioDevice || "auto";
@@ -129,6 +131,7 @@ const getStatusPayload = () => ({
   applianceId,
   name: displayName,
   displayName,
+  pairingCode,
   roomCode,
   roomName,
   online: true,
@@ -511,6 +514,8 @@ const applyConfig = (updates = {}) => {
   applianceConfigState.roomCode = sanitizeRoomCode(applianceConfigState.roomCode);
   applianceConfigState.displayName =
     applianceConfigState.displayName || applianceConfigState.applianceId;
+  applianceConfigState.pairingCode =
+    applianceConfigState.pairingCode || String(applianceConfigState.applianceId).toUpperCase();
   applianceConfigState.roomName =
     applianceConfigState.roomName || applianceConfigState.roomCode;
   applianceConfigState.audioDevice = applianceConfigState.audioDevice || "auto";
@@ -520,6 +525,7 @@ const applyConfig = (updates = {}) => {
 
   applianceId = applianceConfigState.applianceId || applianceId;
   displayName = applianceConfigState.displayName || applianceId;
+  pairingCode = applianceConfigState.pairingCode || String(applianceId).toUpperCase();
   roomCode = applianceConfigState.roomCode || roomCode;
   roomName = applianceConfigState.roomName || roomCode;
   audioDeviceSetting = applianceConfigState.audioDevice;
@@ -720,6 +726,7 @@ const connectCommandSocket = () => {
 const main = async () => {
   console.log(`Pi host server URL: ${SERVER_URL}`);
   console.log(`Pi host appliance ID: ${applianceId}`);
+  console.log(`Pi host pairing code: ${pairingCode}`);
   console.log(`Pi host room code: ${roomCode}`);
   console.log(`Pi host room name: ${roomName}`);
   console.log(`Pi host audio device setting: ${audioDeviceSetting}`);
