@@ -4,6 +4,7 @@ import LandingPage from "./LandingPage";
 import HostDashboard from "./HostDashboard";
 import ListenerDashboard from "./ListenerDashboard";
 import ApplianceAdminPage from "./ApplianceAdminPage";
+import PrintBoxPage from "./PrintBoxPage";
 
 const getSocketUrl = () => {
   if (import.meta.env.VITE_BACKEND_URL) {
@@ -67,6 +68,7 @@ const getToastType = (text) => {
 };
 
 function App() {
+  const isPrintBoxPage = window.location.pathname.startsWith("/print/box/");
   const isAdminPage =
     window.location.pathname === "/admin" ||
     new URLSearchParams(window.location.search).get("admin") === "1";
@@ -1439,6 +1441,10 @@ function App() {
       setTimeout(startListening, 0);
     }
   }, [hostType, isHostLive, role, isListening, userPausedListening]);
+
+  if (isPrintBoxPage) {
+    return <PrintBoxPage />;
+  }
 
   if (isAdminPage) {
     return (

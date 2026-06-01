@@ -1,5 +1,7 @@
 import QRJoinScreen from "./QRJoinScreen";
 
+const printPayloadPrefix = "sportsAudioPrintBox:";
+
 function HostDashboard({
   currentRoom,
   isBroadcasting,
@@ -28,7 +30,25 @@ function HostDashboard({
 
   const printRoomQr = () => {
     if (!currentRoom || !joinLink) return;
-    window.print();
+    const printId = `room-${currentRoom}`;
+    const payload = {
+      boxId: printId,
+      boxName: `Room ${currentRoom}`,
+      venueName: "SyncLink Venue",
+      roomCode: currentRoom,
+      joinUrl: joinLink
+    };
+    const storageKey = `${printPayloadPrefix}${printId}`;
+    const printUrl = `/print/box/${encodeURIComponent(printId)}`;
+
+    sessionStorage.setItem(storageKey, JSON.stringify(payload));
+    localStorage.setItem(storageKey, JSON.stringify(payload));
+
+    const printWindow = window.open(printUrl, "_blank");
+
+    if (!printWindow) {
+      window.location.assign(printUrl);
+    }
   };
 
   return (
@@ -73,14 +93,6 @@ function HostDashboard({
             </button>
           </div>
         )}
-
-        <div className="print-room-qr" aria-hidden="true">
-          <div className="print-brand">SyncLink</div>
-          <div className="print-title">Listen to this TV Audio</div>
-          <QRJoinScreen roomCode={currentRoom} joinUrl={joinLink} variant="print" />
-          <div className="print-room-code">{currentRoom}</div>
-          <div className="print-instruction">Scan or enter this code to join.</div>
-        </div>
 
         {!isBroadcasting && (
           <div className="panel-card host-controls">

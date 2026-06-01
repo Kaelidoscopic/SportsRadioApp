@@ -3,6 +3,7 @@ import QRJoinScreen from "./QRJoinScreen";
 
 const authTokenKey = "sportsAudioAuthToken";
 const authUserKey = "sportsAudioAuthUser";
+const printPayloadPrefix = "sportsAudioPrintBox:";
 
 const getApiUrl = () => {
   if (import.meta.env.VITE_BACKEND_URL) return import.meta.env.VITE_BACKEND_URL;
@@ -37,7 +38,6 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
   const [boxes, setBoxes] = useState([]);
   const [selectedBoxId, setSelectedBoxId] = useState("");
   const [visibleQrBoxId, setVisibleQrBoxId] = useState("");
-  const [printBoxId, setPrintBoxId] = useState("");
   const [edits, setEdits] = useState({});
   const [message, setMessage] = useState("Log in or sign up to manage your audio boxes.");
   const [setupRequired, setSetupRequired] = useState(false);
@@ -46,7 +46,6 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
     import.meta.env.VITE_FRONTEND_URL || window.location.origin;
 
   const selectedBox = boxes.find((box) => box.applianceId === selectedBoxId);
-  const printBox = boxes.find((box) => box.applianceId === printBoxId);
   const isUnlocked = Boolean(token && user) || adminUnlocked;
 
   const getJoinUrl = (box) => {
@@ -185,14 +184,6 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
     };
   }, [isUnlocked, refreshBoxes]);
 
-  useEffect(() => {
-    const clearPrintBox = () => setPrintBoxId("");
-
-    window.addEventListener("afterprint", clearPrintBox);
-
-    return () => window.removeEventListener("afterprint", clearPrintBox);
-  }, []);
-
   const submitAuth = async () => {
     try {
       const path = authMode === "signup" ? "/api/auth/signup" : "/api/auth/login";
@@ -305,29 +296,24 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
       return;
     }
 
-    setPrintBoxId(box.applianceId);
-    window.setTimeout(() => window.print(), 0);
-  };
+    const payload = {
+      boxId: box.applianceId,
+      boxName: getBoxSourceName(box),
+      venueName: getVenueName(),
+      roomCode: box.roomCode,
+      joinUrl: getJoinUrl(box)
+    };
+    const storageKey = `${printPayloadPrefix}${box.applianceId}`;
+    const printUrl = `/print/box/${encodeURIComponent(box.applianceId)}`;
 
-  const renderPrintableSign = (box) => {
-    if (!box) return null;
+    sessionStorage.setItem(storageKey, JSON.stringify(payload));
+    localStorage.setItem(storageKey, JSON.stringify(payload));
 
-    return (
-      <div className="print-room-qr box-print-sign" aria-hidden="true">
-        <div className="print-brand">SyncLink</div>
-        <div className="print-title">Listen to this TV Audio</div>
-        <div className="print-source-name">{getBoxSourceName(box)}</div>
-        <div className="print-venue-name">{getVenueName()}</div>
-        <QRJoinScreen roomCode={box.roomCode} joinUrl={getJoinUrl(box)} variant="print" />
-        <div className="print-room-code">{box.roomCode}</div>
-        <div className="print-instruction">
-          Scan this QR code or enter the room code to listen.
-        </div>
-        <div className="print-sub-instruction">
-          Open SyncLink - Join Audio - Enter Room Code
-        </div>
-      </div>
-    );
+    const printWindow = window.open(printUrl, "_blank");
+
+    if (!printWindow) {
+      window.location.assign(printUrl);
+    }
   };
 
   const renderBoxCard = (box) => (
@@ -739,8 +725,6 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
             </div>
           </>
         )}
-
-        {renderPrintableSign(printBox)}
       </div>
     </div>
   );
