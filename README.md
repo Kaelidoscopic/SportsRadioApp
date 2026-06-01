@@ -110,6 +110,7 @@ Backend admin env:
 
 ```env
 ADMIN_PIN=5235
+SPORTSYNC_DB_PATH=./data/sports-sync.sqlite
 ```
 
 Production flow:

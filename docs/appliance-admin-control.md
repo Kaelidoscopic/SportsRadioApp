@@ -133,6 +133,23 @@ Owner routes require `Authorization: Bearer <token>`:
 - `POST /api/my/appliances/:applianceId/activate-room`
 - `POST /api/my/appliances/:applianceId/deactivate-room`
 
+## Persistent Models
+
+The backend persists Phase 2 data in SQLite. Configure the file location with:
+
+```env
+SPORTSYNC_DB_PATH=./data/sports-sync.sqlite
+```
+
+Models:
+
+- User: account email, display name, and password hash
+- Appliance: box name, room settings, online/audio/room status, heartbeat, listener count
+- Ownership: which user owns which appliance
+- Pairing: pairing code assigned to an appliance
+
+The admin PIN fallback still reads from `ADMIN_PIN` and can control registered boxes even before they are linked to a user.
+
 ## Expected Behavior
 
 Room-code changes stop the old appliance room, save the new room code, re-register the new room, and resume audio uploads if audio is enabled.

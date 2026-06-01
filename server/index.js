@@ -1,6 +1,9 @@
 const express = require("express");
 const http = require("http");
 const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
+const { DatabaseSync } = require("node:sqlite");
 const cors = require("cors");
 const { Server } = require("socket.io");
 require("dotenv").config();
@@ -24,11 +27,198 @@ const APPLIANCE_OFFLINE_AFTER_MS = 10000;
 const appliances = {};
 const applianceSockets = {};
 const adminSockets = new Set();
-const users = {};
-const usersByEmail = {};
-const sessions = {};
+
+const DB_PATH =
+  process.env.SPORTSYNC_DB_PATH ||
+  path.join(__dirname, "data", "sports-sync.sqlite");
+fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+const db = new DatabaseSync(DB_PATH);
+db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    user_id TEXT PRIMARY KEY,
+    email TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL,
+    password_salt TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS appliances (
+    appliance_id TEXT PRIMARY KEY,
+    display_name TEXT NOT NULL,
+    room_code TEXT NOT NULL,
+    room_name TEXT NOT NULL,
+    is_public INTEGER NOT NULL DEFAULT 1,
+    is_online INTEGER NOT NULL DEFAULT 0,
+    is_audio_enabled INTEGER NOT NULL DEFAULT 0,
+    is_room_active INTEGER NOT NULL DEFAULT 0,
+    last_heartbeat TEXT,
+    listener_count INTEGER NOT NULL DEFAULT 0,
+    audio_status TEXT NOT NULL DEFAULT 'unknown',
+    uptime INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS ownerships (
+    user_id TEXT NOT NULL,
+    appliance_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, appliance_id),
+    UNIQUE (appliance_id),
+    FOREIGN KEY (user_id) REFERENCES users(user_id),
+    FOREIGN KEY (appliance_id) REFERENCES appliances(appliance_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS pairing_codes (
+    pairing_code TEXT PRIMARY KEY,
+    appliance_id TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (appliance_id) REFERENCES appliances(appliance_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS sessions (
+    token TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(user_id)
+  );
+`);
 
 const nowIso = () => new Date().toISOString();
+
+const boolToInt = (value) => (value ? 1 : 0);
+
+const rowToUser = (row) =>
+  row
+    ? {
+        userId: row.user_id,
+        email: row.email,
+        displayName: row.display_name,
+        password: {
+          salt: row.password_salt,
+          hash: row.password_hash
+        },
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      }
+    : null;
+
+const getOwnerUserId = (applianceId) => {
+  const row = db
+    .prepare("SELECT user_id FROM ownerships WHERE appliance_id = ?")
+    .get(applianceId);
+
+  return row?.user_id || null;
+};
+
+const rowToAppliance = (row) =>
+  row
+    ? {
+        applianceId: row.appliance_id,
+        ownerUserId: getOwnerUserId(row.appliance_id),
+        pairingCode:
+          db
+            .prepare("SELECT pairing_code FROM pairing_codes WHERE appliance_id = ?")
+            .get(row.appliance_id)?.pairing_code || String(row.appliance_id).toUpperCase(),
+        displayName: row.display_name,
+        roomCode: row.room_code,
+        roomName: row.room_name,
+        isPublic: Boolean(row.is_public),
+        isOnline: Boolean(row.is_online),
+        isAudioEnabled: Boolean(row.is_audio_enabled),
+        isRoomActive: Boolean(row.is_room_active),
+        lastHeartbeat: row.last_heartbeat,
+        listenerCount: Number(row.listener_count) || 0,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        audioStatus: row.audio_status || "unknown",
+        uptime: Number(row.uptime) || 0,
+        socketId: null
+      }
+    : null;
+
+const saveApplianceRecord = (appliance) => {
+  db.prepare(
+    `
+      INSERT INTO appliances (
+        appliance_id,
+        display_name,
+        room_code,
+        room_name,
+        is_public,
+        is_online,
+        is_audio_enabled,
+        is_room_active,
+        last_heartbeat,
+        listener_count,
+        audio_status,
+        uptime,
+        created_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(appliance_id) DO UPDATE SET
+        display_name = excluded.display_name,
+        room_code = excluded.room_code,
+        room_name = excluded.room_name,
+        is_public = excluded.is_public,
+        is_online = excluded.is_online,
+        is_audio_enabled = excluded.is_audio_enabled,
+        is_room_active = excluded.is_room_active,
+        last_heartbeat = excluded.last_heartbeat,
+        listener_count = excluded.listener_count,
+        audio_status = excluded.audio_status,
+        uptime = excluded.uptime,
+        updated_at = excluded.updated_at
+    `
+  ).run(
+    appliance.applianceId,
+    appliance.displayName,
+    appliance.roomCode,
+    appliance.roomName,
+    boolToInt(appliance.isPublic !== false),
+    boolToInt(appliance.isOnline),
+    boolToInt(appliance.isAudioEnabled),
+    boolToInt(appliance.isRoomActive),
+    appliance.lastHeartbeat || null,
+    Number(appliance.listenerCount) || 0,
+    appliance.audioStatus || "unknown",
+    Number(appliance.uptime) || 0,
+    appliance.createdAt,
+    appliance.updatedAt
+  );
+
+  const pairingCode = String(
+    appliance.pairingCode || appliance.applianceId
+  ).trim().toUpperCase();
+
+  db.prepare(
+    `
+      INSERT INTO pairing_codes (pairing_code, appliance_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(appliance_id) DO UPDATE SET
+        pairing_code = excluded.pairing_code,
+        updated_at = excluded.updated_at
+    `
+  ).run(pairingCode, appliance.applianceId, appliance.createdAt, appliance.updatedAt);
+};
+
+const loadApplianceRegistry = () => {
+  const rows = db.prepare("SELECT * FROM appliances").all();
+
+  rows.forEach((row) => {
+    const appliance = rowToAppliance(row);
+
+    if (appliance) {
+      appliances[appliance.applianceId] = appliance;
+    }
+  });
+};
+
+loadApplianceRegistry();
 
 const normalizeEmail = (email) => String(email || "").trim().toLowerCase();
 
@@ -59,11 +249,9 @@ const toUserDto = (user) => ({
 
 const createSession = (userId) => {
   const token = crypto.randomBytes(32).toString("hex");
-  sessions[token] = {
-    token,
-    userId,
-    createdAt: nowIso()
-  };
+  db.prepare(
+    "INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)"
+  ).run(token, userId, nowIso());
   return token;
 };
 
@@ -73,11 +261,15 @@ const getAuthUser = (req) => {
   if (!authHeader.toLowerCase().startsWith("bearer ")) return null;
 
   const token = authHeader.slice(7).trim();
-  const session = sessions[token];
+  const session = db
+    .prepare("SELECT user_id FROM sessions WHERE token = ?")
+    .get(token);
 
   if (!session) return null;
 
-  return users[session.userId] || null;
+  return rowToUser(
+    db.prepare("SELECT * FROM users WHERE user_id = ?").get(session.user_id)
+  );
 };
 
 const requireAuthUser = (req, res) => {
@@ -149,7 +341,7 @@ const createOrUpdateManagedAppliance = (payload = {}, socketId = null) => {
 
   appliances[applianceId] = {
     applianceId,
-    ownerUserId: existing.ownerUserId || payload.ownerUserId || null,
+    ownerUserId: existing.ownerUserId || payload.ownerUserId || getOwnerUserId(applianceId),
     pairingCode:
       payload.pairingCode || existing.pairingCode || String(applianceId).toUpperCase(),
     displayName: payload.displayName || payload.name || existing.displayName || applianceId,
@@ -175,6 +367,7 @@ const createOrUpdateManagedAppliance = (payload = {}, socketId = null) => {
     applianceSockets[applianceId] = socketId;
   }
 
+  saveApplianceRecord(appliances[applianceId]);
   return appliances[applianceId];
 };
 
@@ -244,6 +437,7 @@ const updateApplianceStatus = (payload = {}, socketId = null) => {
       room.appliance = {
         ...(room.appliance || {}),
         roomName: appliance.roomName,
+        isPublic: appliance.isPublic !== false,
         lastSeen: Date.now()
       };
 
@@ -423,6 +617,7 @@ const markApplianceOffline = (roomId, reason = "Pi host is offline.") => {
     appliances[applianceId].isAudioEnabled = false;
     appliances[applianceId].listenerCount = room.listeners.length;
     appliances[applianceId].updatedAt = nowIso();
+    saveApplianceRecord(appliances[applianceId]);
   }
 
   io.to(roomId).emit("broadcast-status", {
@@ -701,6 +896,7 @@ io.on("connection", (socket) => {
           appliances[applianceId].isOnline = false;
           appliances[applianceId].lastHeartbeat = nowIso();
           appliances[applianceId].updatedAt = nowIso();
+          saveApplianceRecord(appliances[applianceId]);
         }
 
         emitApplianceList();
@@ -999,11 +1195,12 @@ const sendAdminApplianceCommand = (res, appliance, eventName, payload = {}) => {
 const getOwnedAppliance = (req, res, user) => {
   const appliance = getManagedAppliance(req.params.applianceId);
 
-  if (!appliance || appliance.ownerUserId !== user.userId) {
+  if (!appliance || getOwnerUserId(appliance.applianceId) !== user.userId) {
     res.status(404).json({ error: "Appliance not found." });
     return null;
   }
 
+  appliance.ownerUserId = user.userId;
   return appliance;
 };
 
@@ -1069,24 +1266,45 @@ app.post("/api/auth/signup", (req, res) => {
     return;
   }
 
-  if (usersByEmail[email]) {
+  if (db.prepare("SELECT user_id FROM users WHERE email = ?").get(email)) {
     res.status(409).json({ error: "An account already exists for that email." });
     return;
   }
 
   const userId = `user_${crypto.randomBytes(8).toString("hex")}`;
   const timestamp = nowIso();
+  const passwordRecord = hashPassword(password);
   const user = {
     userId,
     email,
     displayName,
-    password: hashPassword(password),
+    password: passwordRecord,
     createdAt: timestamp,
     updatedAt: timestamp
   };
 
-  users[userId] = user;
-  usersByEmail[email] = userId;
+  db.prepare(
+    `
+      INSERT INTO users (
+        user_id,
+        email,
+        display_name,
+        password_salt,
+        password_hash,
+        created_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `
+  ).run(
+    userId,
+    email,
+    displayName,
+    passwordRecord.salt,
+    passwordRecord.hash,
+    timestamp,
+    timestamp
+  );
 
   const token = createSession(userId);
   res.status(201).json({ token, user: toUserDto(user) });
@@ -1095,7 +1313,9 @@ app.post("/api/auth/signup", (req, res) => {
 app.post("/api/auth/login", (req, res) => {
   const email = normalizeEmail(req.body?.email);
   const password = String(req.body?.password || "");
-  const user = users[usersByEmail[email]];
+  const user = rowToUser(
+    db.prepare("SELECT * FROM users WHERE email = ?").get(email)
+  );
 
   if (!user || !verifyPassword(password, user.password)) {
     res.status(401).json({ error: "Invalid email or password." });
@@ -1118,9 +1338,25 @@ app.get("/api/my/appliances", (req, res) => {
   if (!user) return;
 
   res.json({
-    appliances: Object.values(appliances)
-      .filter((appliance) => appliance.ownerUserId === user.userId)
-      .map(toApplianceDto)
+    appliances: db
+      .prepare(
+        `
+          SELECT appliances.*
+          FROM appliances
+          JOIN ownerships ON ownerships.appliance_id = appliances.appliance_id
+          WHERE ownerships.user_id = ?
+          ORDER BY appliances.display_name
+        `
+      )
+      .all(user.userId)
+      .map((row) => {
+        const appliance = rowToAppliance(row);
+        appliances[appliance.applianceId] = {
+          ...appliance,
+          socketId: appliances[appliance.applianceId]?.socketId || null
+        };
+        return toApplianceDto(appliances[appliance.applianceId]);
+      })
   });
 });
 
@@ -1135,25 +1371,43 @@ app.post("/api/my/appliances/link", (req, res) => {
     return;
   }
 
-  const appliance = Object.values(appliances).find(
-    (candidate) => String(candidate.pairingCode || "").toUpperCase() === pairingCode
-  );
+  const pairing = db
+    .prepare("SELECT appliance_id FROM pairing_codes WHERE pairing_code = ?")
+    .get(pairingCode);
+  let appliance = pairing
+    ? getManagedAppliance(pairing.appliance_id) ||
+      rowToAppliance(
+        db.prepare("SELECT * FROM appliances WHERE appliance_id = ?").get(pairing.appliance_id)
+      )
+    : null;
 
   if (!appliance) {
     res.status(404).json({ error: "No appliance found for that pairing code." });
     return;
   }
 
-  if (appliance.ownerUserId && appliance.ownerUserId !== user.userId) {
+  const existingOwner = getOwnerUserId(appliance.applianceId);
+
+  if (existingOwner && existingOwner !== user.userId) {
     res.status(409).json({ error: "Appliance is already linked to another user." });
     return;
   }
 
   appliance.ownerUserId = user.userId;
   appliance.updatedAt = nowIso();
+  appliances[appliance.applianceId] = {
+    ...appliance,
+    socketId: appliances[appliance.applianceId]?.socketId || null
+  };
+  db.prepare(
+    `
+      INSERT OR IGNORE INTO ownerships (user_id, appliance_id, created_at)
+      VALUES (?, ?, ?)
+    `
+  ).run(user.userId, appliance.applianceId, nowIso());
   emitApplianceList();
 
-  res.json({ appliance: toApplianceDto(appliance) });
+  res.json({ appliance: toApplianceDto(appliances[appliance.applianceId]) });
 });
 
 app.get("/api/my/appliances/:applianceId", (req, res) => {
@@ -1188,6 +1442,7 @@ app.patch("/api/my/appliances/:applianceId/settings", (req, res) => {
   }
 
   Object.assign(appliance, updates, { updatedAt: nowIso() });
+  saveApplianceRecord(appliance);
   emitApplianceList();
   res.json({ appliance: toApplianceDto(appliance), delivered: true });
 });
@@ -1203,6 +1458,7 @@ app.post("/api/my/appliances/:applianceId/start-audio", (req, res) => {
   appliance.isAudioEnabled = true;
   appliance.isRoomActive = true;
   appliance.updatedAt = nowIso();
+  saveApplianceRecord(appliance);
   emitApplianceList();
   res.json({ appliance: toApplianceDto(appliance), delivered: true });
 });
@@ -1217,6 +1473,7 @@ app.post("/api/my/appliances/:applianceId/stop-audio", (req, res) => {
 
   appliance.isAudioEnabled = false;
   appliance.updatedAt = nowIso();
+  saveApplianceRecord(appliance);
   emitApplianceList();
   res.json({ appliance: toApplianceDto(appliance), delivered: true });
 });
@@ -1238,6 +1495,7 @@ app.post("/api/my/appliances/:applianceId/activate-room", (req, res) => {
 
   appliance.isRoomActive = true;
   appliance.updatedAt = nowIso();
+  saveApplianceRecord(appliance);
   emitApplianceList();
   res.json({ appliance: toApplianceDto(appliance), delivered: true });
 });
@@ -1255,6 +1513,7 @@ app.post("/api/my/appliances/:applianceId/deactivate-room", (req, res) => {
   appliance.isRoomActive = false;
   appliance.isAudioEnabled = false;
   appliance.updatedAt = nowIso();
+  saveApplianceRecord(appliance);
   markApplianceOffline(appliance.roomCode, "Owner deactivated appliance room.");
   emitApplianceList();
   res.json({ appliance: toApplianceDto(appliance), delivered: true });
@@ -1296,6 +1555,7 @@ app.patch("/api/appliances/:applianceId/settings", (req, res) => {
   }
 
   Object.assign(appliance, updates, { updatedAt: nowIso() });
+  saveApplianceRecord(appliance);
   emitApplianceList();
   res.json({ appliance: toApplianceDto(appliance), delivered: true });
 });
@@ -1309,6 +1569,7 @@ app.post("/api/appliances/:applianceId/start-audio", (req, res) => {
   appliance.isAudioEnabled = true;
   appliance.isRoomActive = true;
   appliance.updatedAt = nowIso();
+  saveApplianceRecord(appliance);
   emitApplianceList();
   res.json({ appliance: toApplianceDto(appliance), delivered: true });
 });
@@ -1321,6 +1582,7 @@ app.post("/api/appliances/:applianceId/stop-audio", (req, res) => {
 
   appliance.isAudioEnabled = false;
   appliance.updatedAt = nowIso();
+  saveApplianceRecord(appliance);
   emitApplianceList();
   res.json({ appliance: toApplianceDto(appliance), delivered: true });
 });
@@ -1340,6 +1602,7 @@ app.post("/api/appliances/:applianceId/activate-room", (req, res) => {
 
   appliance.isRoomActive = true;
   appliance.updatedAt = nowIso();
+  saveApplianceRecord(appliance);
   emitApplianceList();
   res.json({ appliance: toApplianceDto(appliance), delivered: true });
 });
@@ -1357,6 +1620,7 @@ app.post("/api/appliances/:applianceId/deactivate-room", (req, res) => {
   appliance.isRoomActive = false;
   appliance.isAudioEnabled = false;
   appliance.updatedAt = nowIso();
+  saveApplianceRecord(appliance);
   markApplianceOffline(appliance.roomCode, "Admin deactivated appliance room.");
   emitApplianceList();
   res.json({ appliance: toApplianceDto(appliance), delivered: true });

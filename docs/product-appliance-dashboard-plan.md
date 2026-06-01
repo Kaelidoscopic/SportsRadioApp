@@ -78,7 +78,15 @@ Phase 2 adds the first real account and ownership layer:
 - owner-scoped appliance settings and controls
 - admin PIN remains available as a fallback
 
-Current implementation note: users, sessions, and ownership live in backend memory until a database is added. Restarting the backend clears account and ownership data, but does not break the Pi's HOME appliance room flow.
+The current implementation persists these models in SQLite:
+
+- `users`
+- `sessions`
+- `appliances`
+- `ownerships`
+- `pairing_codes`
+
+Set `SPORTSYNC_DB_PATH` to choose the database file. By default the backend uses `server/data/sports-sync.sqlite`.
 
 ## Phase 3
 
