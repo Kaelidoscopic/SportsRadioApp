@@ -309,13 +309,17 @@ select:disabled {
 }
 
 .recommended-card {
-  border-color: rgba(79, 140, 255, 0.8);
-  background: #20293a;
+  border-color: #2d3442;
+  background: #1d212b;
 }
 
-.action-card-button:hover:not(:disabled) {
+.action-card-button:hover:not(:disabled),
+.action-card-button:focus-visible,
+.action-card-button:active:not(:disabled) {
   background: #252b38;
   border-color: #4f8cff;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(79, 140, 255, 0.18);
 }
 
 .action-card-title {
@@ -719,6 +723,16 @@ select:disabled {
   margin-bottom: 1.5rem;
 }
 
+.print-room-qr {
+  display: none;
+}
+
+.print-qr-card {
+  display: flex;
+  justify-content: center;
+  margin: 1.5rem 0;
+}
+
 .qr-join-details {
   min-width: 0;
   display: flex;
@@ -752,6 +766,13 @@ select:disabled {
   background: white;
   padding: 1rem;
   border-radius: 16px;
+}
+
+.print-brand,
+.print-title,
+.print-room-code,
+.print-instruction {
+  display: none;
 }
 
 .host-hint,
@@ -887,5 +908,72 @@ audio {
   .qr-join-card {
     justify-items: center;
     text-align: center;
+  }
+}
+
+@media print {
+  body {
+    background: white;
+    color: #111827;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .print-room-qr,
+  .print-room-qr * {
+    visibility: visible;
+  }
+
+  .print-room-qr {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 0.65rem;
+    background: white;
+    color: #111827;
+    padding: 0.6in;
+    text-align: center;
+  }
+
+  .print-brand,
+  .print-title,
+  .print-room-code,
+  .print-instruction {
+    display: block;
+  }
+
+  .print-brand {
+    font-size: 34pt;
+    font-weight: 800;
+  }
+
+  .print-title {
+    font-size: 22pt;
+    font-weight: 700;
+  }
+
+  .print-room-code {
+    border: 3px solid #111827;
+    border-radius: 10px;
+    font-size: 42pt;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    margin-top: 0.2in;
+    padding: 0.12in 0.28in;
+  }
+
+  .print-instruction {
+    font-size: 16pt;
+  }
+
+  .print-room-qr .qr-box {
+    border: 2px solid #111827;
+    border-radius: 12px;
+    padding: 0.18in;
   }
 }

@@ -26,6 +26,11 @@ function HostDashboard({
     await navigator.clipboard.writeText(joinLink);
   };
 
+  const printRoomQr = () => {
+    if (!currentRoom || !joinLink) return;
+    window.print();
+  };
+
   return (
     <div className="page-shell">
       <div className="main-card dashboard-card host-card simple-host-card">
@@ -58,10 +63,24 @@ function HostDashboard({
         <QRJoinScreen roomCode={currentRoom} joinUrl={joinLink} />
 
         {currentRoom && (
-          <button className="secondary-button" onClick={copyJoinLink}>
-            QR / Share Link
-          </button>
+          <div className="share-actions">
+            <button className="secondary-button" onClick={copyJoinLink}>
+              QR / Share Link
+            </button>
+
+            <button className="secondary-button" onClick={printRoomQr}>
+              Print Room QR
+            </button>
+          </div>
         )}
+
+        <div className="print-room-qr" aria-hidden="true">
+          <div className="print-brand">SyncLink</div>
+          <div className="print-title">Listen to this TV Audio</div>
+          <QRJoinScreen roomCode={currentRoom} joinUrl={joinLink} variant="print" />
+          <div className="print-room-code">{currentRoom}</div>
+          <div className="print-instruction">Scan or enter this code to join.</div>
+        </div>
 
         {!isBroadcasting && (
           <div className="panel-card host-controls">
