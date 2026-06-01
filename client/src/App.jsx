@@ -191,8 +191,6 @@ function App() {
     }
 
     try {
-      await mediaDevices.getUserMedia({ audio: true });
-
       const devices = await mediaDevices.enumerateDevices();
       const audioDevices = devices.filter(
         (device) => device.kind === "audioinput"
@@ -217,6 +215,8 @@ function App() {
       );
     } catch (error) {
       console.error("Failed to load audio devices:", error);
+      setAudioInputs([]);
+      setSelectedAudioInput("");
     }
   };
 
@@ -231,23 +231,6 @@ function App() {
     await loadAudioInputs();
     setMessage("Audio devices refreshed.");
   };
-
-  useEffect(() => {
-    const loadTimer = setTimeout(loadAudioInputs, 0);
-    const mediaDevices = getMediaDevices();
-
-    if (mediaDevices?.addEventListener) {
-      mediaDevices.addEventListener("devicechange", loadAudioInputs);
-    }
-
-    return () => {
-      clearTimeout(loadTimer);
-
-      if (mediaDevices?.removeEventListener) {
-        mediaDevices.removeEventListener("devicechange", loadAudioInputs);
-      }
-    };
-  }, []);
 
   const playRemoteAudio = async () => {
     if (!remoteAudioRef.current) return;
@@ -1181,9 +1164,13 @@ function App() {
         stream = new MediaStream(audioTracks);
         displayStream.getVideoTracks().forEach((track) => track.stop());
       } else {
+        const selectedInputIsKnown = audioInputs.some(
+          (device) => device.deviceId === selectedAudioInput
+        );
+
         stream = await mediaDevices.getUserMedia({
           audio: {
-            deviceId: selectedAudioInput
+            deviceId: selectedAudioInput && selectedInputIsKnown
               ? { exact: selectedAudioInput }
               : undefined,
             echoCancellation: false,
@@ -1191,6 +1178,8 @@ function App() {
             autoGainControl: false
           }
         });
+
+        loadAudioInputs();
       }
 
       const audioTracks = stream.getAudioTracks();
@@ -1221,7 +1210,20 @@ function App() {
       };
     } catch (error) {
       console.error("Audio capture failed:", error);
-      setMessage("Could not access selected audio source.");
+      if (
+        broadcastSourceType === "input" &&
+        (error?.name === "NotAllowedError" ||
+          error?.name === "PermissionDeniedError")
+      ) {
+        setMessage("Microphone access is needed to host from this device.");
+        return;
+      }
+
+      setMessage(
+        broadcastSourceType === "tab"
+          ? "Could not access shared tab or screen audio."
+          : "Could not access selected audio source."
+      );
     }
   };
 
