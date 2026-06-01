@@ -17,7 +17,6 @@ function LandingPage({
   createRoom,
   joinRoom,
   activeRooms = [],
-  statusMessage,
   isSocketConnected,
   preferredMode = null
 }) {
@@ -162,9 +161,7 @@ function LandingPage({
             <p className="app-subtitle">Sign in to broadcast or manage devices.</p>
           </div>
 
-          {(authMessage || statusMessage) && (
-            <div className="status-banner">{authMessage || statusMessage}</div>
-          )}
+          {authMessage && <div className="status-banner">{authMessage}</div>}
 
           <div className="compact-actions">
             {authMode === "signup" && (
@@ -232,8 +229,6 @@ function LandingPage({
             <p className="app-subtitle">Live audio for the screen in front of you.</p>
           </div>
 
-          {statusMessage && <div className="status-banner">{statusMessage}</div>}
-
           <div className="compact-actions">
             <button className="primary-button big-button" onClick={openJoin}>
               Join Audio
@@ -278,8 +273,6 @@ function LandingPage({
             <h1 className="app-title">Join Audio</h1>
           </div>
 
-          {statusMessage && <div className="status-banner">{statusMessage}</div>}
-
           <div className="stacked-option-list">
             <button className="action-card-button recommended-card" onClick={() => setScannerOpen(true)}>
               <span className="action-card-title">Scan QR Code</span>
@@ -319,8 +312,6 @@ function LandingPage({
           <div className="brand-block centered-brand">
             <h1 className="app-title">Enter Room Code</h1>
           </div>
-
-          {statusMessage && <div className="status-banner">{statusMessage}</div>}
 
           <div className="compact-actions">
             <input
@@ -420,8 +411,6 @@ function LandingPage({
             <h1 className="app-title">Host Audio</h1>
           </div>
 
-          {statusMessage && <div className="status-banner">{statusMessage}</div>}
-
           <div className="stacked-option-list">
             <button
               className="action-card-button"
@@ -465,8 +454,6 @@ function LandingPage({
           <div className="brand-block centered-brand">
             <h1 className="app-title">Browser Audio</h1>
           </div>
-
-          {statusMessage && <div className="status-banner">{statusMessage}</div>}
 
           <div className="compact-actions">
             <input

@@ -9,7 +9,6 @@ function ListenerDashboard({
   resumeApplianceAudio,
   needsUserAudioGesture = false,
   remoteAudioRef,
-  statusMessage,
   isSocketConnected
 }) {
   const roomLabel =
@@ -46,8 +45,6 @@ function ListenerDashboard({
             {isSocketConnected ? "Connected" : "Disconnected"}
           </div>
         </div>
-
-        {statusMessage && <div className="status-banner">{statusMessage}</div>}
 
         <div className="compact-actions">
           {shouldShowStartButton && (

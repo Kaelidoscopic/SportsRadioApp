@@ -129,6 +129,59 @@ select:disabled {
   text-align: center;
 }
 
+.app-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 1.25rem;
+  z-index: 2000;
+  max-width: min(420px, calc(100vw - 2rem));
+  transform: translateX(-50%);
+  border: 1px solid #3a4456;
+  border-radius: 14px;
+  background: rgba(23, 26, 33, 0.96);
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.42);
+  color: #f3f4f6;
+  font-size: 0.92rem;
+  line-height: 1.35;
+  padding: 0.85rem 1rem;
+  text-align: center;
+  animation: toast-in-out 3s ease forwards;
+}
+
+.app-toast.success {
+  border-color: rgba(34, 197, 94, 0.55);
+  background: rgba(18, 38, 29, 0.96);
+  color: #b8f7c9;
+}
+
+.app-toast.error {
+  border-color: rgba(239, 68, 68, 0.55);
+  background: rgba(48, 24, 28, 0.96);
+  color: #ffc2c2;
+}
+
+.app-toast.neutral {
+  border-color: rgba(79, 140, 255, 0.55);
+}
+
+@keyframes toast-in-out {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 12px);
+  }
+
+  12%,
+  82% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+}
+
 .warning-banner {
   border-color: rgba(239, 68, 68, 0.45);
   color: #ffb4b4;

@@ -34,6 +34,38 @@ const mediaUnavailableMessage =
 const savedListenerRoomKey = "venueAudioListenerRoomCode";
 const savedListenerWasListeningKey = "venueAudioListenerWasListening";
 
+const getToastType = (text) => {
+  const value = String(text || "").toLowerCase();
+
+  if (
+    value.includes("failed") ||
+    value.includes("error") ||
+    value.includes("invalid") ||
+    value.includes("offline") ||
+    value.includes("disconnected") ||
+    value.includes("could not") ||
+    value.includes("not found") ||
+    value.includes("first") ||
+    value.includes("interrupted")
+  ) {
+    return "error";
+  }
+
+  if (
+    value.includes("created") ||
+    value.includes("connected") ||
+    value.includes("reconnected") ||
+    value.includes("live") ||
+    value.includes("ready") ||
+    value.includes("refreshed") ||
+    value.includes("resumed")
+  ) {
+    return "success";
+  }
+
+  return "neutral";
+};
+
 function App() {
   const isAdminPage =
     window.location.pathname === "/admin" ||
@@ -43,7 +75,7 @@ function App() {
   const [currentRoom, setCurrentRoom] = useState("");
   const [role, setRole] = useState("");
   const [members, setMembers] = useState([]);
-  const [message, setMessage] = useState("Welcome.");
+  const [message, setMessage] = useState("");
 
   const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [isHostLive, setIsHostLive] = useState(false);
@@ -122,6 +154,16 @@ function App() {
   useEffect(() => {
     userPausedListeningRef.current = userPausedListening;
   }, [userPausedListening]);
+
+  useEffect(() => {
+    if (!message) return undefined;
+
+    const timeoutId = window.setTimeout(() => {
+      setMessage("");
+    }, 3000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [message]);
 
   useEffect(() => {
     applianceDetailsRef.current = applianceDetails;
@@ -1407,15 +1449,25 @@ function App() {
     );
   }
 
+  const renderWithToast = (content) => (
+    <>
+      {content}
+      {message && (
+        <div className={`app-toast ${getToastType(message)}`} role="status">
+          {message}
+        </div>
+      )}
+    </>
+  );
+
   if (!role) {
-    return (
+    return renderWithToast(
       <LandingPage
         roomId={roomId}
         setRoomId={setRoomId}
         createRoom={createRoom}
         joinRoom={joinRoom}
         activeRooms={activeRooms}
-        statusMessage={message}
         isSocketConnected={isSocketConnected}
         preferredMode={preferredLandingMode}
       />
@@ -1423,7 +1475,7 @@ function App() {
   }
 
   if (role === "host") {
-    return (
+    return renderWithToast(
       <HostDashboard
         currentRoom={currentRoom}
         isBroadcasting={isBroadcasting}
@@ -1439,13 +1491,12 @@ function App() {
         setBroadcastSourceType={setBroadcastSourceType}
         refreshAudioInputs={refreshAudioInputs}
         listenerCount={Math.max(members.length - 1, 0)}
-        statusMessage={message}
         isSocketConnected={isSocketConnected}
       />
     );
   }
 
-  return (
+  return renderWithToast(
     <ListenerDashboard
       currentRoom={currentRoom}
       isListening={isListening}
@@ -1463,7 +1514,6 @@ function App() {
       resumeApplianceAudio={resumeApplianceAudioFromGesture}
       needsUserAudioGesture={needsUserAudioGesture}
       remoteAudioRef={remoteAudioRef}
-      statusMessage={message}
       isSocketConnected={isSocketConnected}
     />
   );

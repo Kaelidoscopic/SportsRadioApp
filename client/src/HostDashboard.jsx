@@ -13,7 +13,6 @@ function HostDashboard({
   setBroadcastSourceType,
   refreshAudioInputs,
   listenerCount,
-  statusMessage,
   isSocketConnected
 }) {
   const frontendUrl =
@@ -55,8 +54,6 @@ function HostDashboard({
             </span>
           </div>
         </div>
-
-        {statusMessage && <div className="status-banner">{statusMessage}</div>}
 
         <QRJoinScreen roomCode={currentRoom} joinUrl={joinLink} />
 
