@@ -74,6 +74,13 @@ When the admin changes settings or toggles audio/room state, `pi-host.js` update
 
 ## Admin Controls
 
+Phase 1 has two admin PIN entry points:
+
+- Host Audio -> Login / Sign Up -> My Audio Boxes
+- `/admin`
+
+The Login / Sign Up screen is a placeholder until real account auth is added. Both entry points use the same admin PIN-protected appliance registry.
+
 After entering the admin PIN, each appliance card shows:
 
 - appliance name/id

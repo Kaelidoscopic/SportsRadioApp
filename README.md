@@ -25,6 +25,7 @@ Key appliance docs:
 - [Wiring diagram](docs/wiring-diagram.md)
 - [Pi production setup](docs/pi-production-setup.md)
 - [Appliance admin control](docs/appliance-admin-control.md)
+- [Product appliance dashboard plan](docs/product-appliance-dashboard-plan.md)
 - [Pi update workflow](docs/pi-update-workflow.md)
 - [Physical TV test checklist](docs/physical-tv-test-checklist.md)
 - [Known limitations](docs/known-limitations.md)
@@ -63,6 +64,7 @@ SPORTSYNC_APPLIANCE_ID=HOUSE_BOX_1
 SPORTSYNC_APPLIANCE_NAME=House Box 1
 SPORTSYNC_ROOM_CODE=HOME
 SPORTSYNC_ROOM_NAME=Home Audio
+SPORTSYNC_ROOM_PUBLIC=true
 SPORTSYNC_AUDIO_DEVICE=auto
 ```
 
@@ -98,6 +100,7 @@ SPORTSYNC_APPLIANCE_ID=HOUSE_BOX_1
 SPORTSYNC_APPLIANCE_NAME=House Box 1
 SPORTSYNC_ROOM_CODE=HOME
 SPORTSYNC_ROOM_NAME=Home Audio
+SPORTSYNC_ROOM_PUBLIC=true
 SPORTSYNC_AUDIO_DEVICE=auto
 ```
 

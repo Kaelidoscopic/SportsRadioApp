@@ -87,6 +87,10 @@ const createOrUpdateManagedAppliance = (payload = {}, socketId = null) => {
     displayName: payload.displayName || payload.name || existing.displayName || applianceId,
     roomCode,
     roomName: payload.roomName || existing.roomName || roomCode,
+    isPublic:
+      typeof payload.isPublic === "boolean"
+        ? payload.isPublic
+        : existing.isPublic !== false,
     isOnline: payload.online !== false,
     isAudioEnabled,
     isRoomActive,
@@ -114,6 +118,7 @@ const toApplianceDto = (appliance) => {
     displayName: appliance.displayName,
     roomCode: appliance.roomCode,
     roomName: appliance.roomName,
+    isPublic: appliance.isPublic !== false,
     isOnline: Boolean(appliance.isOnline),
     isAudioEnabled: Boolean(appliance.isAudioEnabled),
     isRoomActive: Boolean(appliance.isRoomActive || room?.hostSocketId),
@@ -126,7 +131,7 @@ const toApplianceDto = (appliance) => {
 
 const getPublicRooms = () =>
   Object.entries(rooms)
-    .filter(([, room]) => room.hostSocketId)
+    .filter(([, room]) => room.hostSocketId && room.appliance?.isPublic !== false)
     .map(([roomId, room]) => ({
       roomId,
       roomName: room.appliance?.roomName || roomId,
@@ -275,6 +280,7 @@ const updateApplianceRoom = (roomId, appliance = {}) => {
     encoding: appliance.encoding || "pcm_s16le",
     label: appliance.label || "Pi audio appliance",
     roomName: appliance.roomName || appliance.displayName || roomId,
+    isPublic: appliance.isPublic !== false,
     lastSeen: Date.now()
   };
 
@@ -959,6 +965,10 @@ app.patch("/api/appliances/:applianceId/settings", (req, res) => {
     }
 
     updates.roomCode = nextRoomCode;
+  }
+
+  if (typeof req.body?.isPublic === "boolean") {
+    updates.isPublic = req.body.isPublic;
   }
 
   if (Object.keys(updates).length === 0) {

@@ -44,6 +44,14 @@ select:disabled {
   padding: 1.75rem;
 }
 
+.app-home-card {
+  max-width: 540px;
+}
+
+.boxes-dashboard-card {
+  max-width: 1040px;
+}
+
 .host-card {
   max-width: 560px;
 }
@@ -235,6 +243,99 @@ select:disabled {
   border: 1px solid #2a3140;
   border-radius: 14px;
   padding: 1rem;
+}
+
+.dashboard-header,
+.smart-box-topline,
+.signed-in-strip,
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.dashboard-header,
+.smart-box-topline,
+.signed-in-strip {
+  justify-content: space-between;
+}
+
+.auth-panel {
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.boxes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.smart-box-card {
+  width: 100%;
+  background: #1d212b;
+  border: 1px solid #2d3442;
+  border-radius: 16px;
+  padding: 1rem;
+  color: #f3f4f6;
+  text-align: left;
+  cursor: pointer;
+}
+
+.smart-box-card:hover {
+  background: #252b38;
+}
+
+.smart-box-name {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.smart-box-code {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: 0.14rem;
+  margin: 1rem 0;
+}
+
+.smart-box-stats,
+.diagnostic-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  color: #b8c0cc;
+  font-size: 0.9rem;
+}
+
+.smart-box-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.box-settings-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.ghost-link-button {
+  background: transparent;
+  border: none;
+  color: #b8c0cc;
+  cursor: pointer;
+  padding: 0;
+}
+
+.toggle-row {
+  color: #d7deea;
+  justify-content: flex-start;
+}
+
+.toggle-row input {
+  width: auto;
 }
 
 .host-mode-divider {
@@ -569,9 +670,16 @@ audio {
   .share-actions,
   .status-grid,
   .admin-metrics,
+  .smart-box-actions,
   .inline-control-row,
   .qr-join-card {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-header,
+  .signed-in-strip {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .inline-control-row .secondary-button {

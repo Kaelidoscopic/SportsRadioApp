@@ -1,5 +1,6 @@
 import { useState } from "react";
 import QRScanner from "./QRScanner";
+import MyAudioBoxesDashboard from "./MyAudioBoxesDashboard";
 
 function LandingPage({
   roomId,
@@ -13,6 +14,9 @@ function LandingPage({
 }) {
   const [mode, setMode] = useState(null);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [demoUser, setDemoUser] = useState(
+    localStorage.getItem("sportsAudioDemoUser") || ""
+  );
   const activeMode = mode || preferredMode;
 
   const savedHostCode = localStorage.getItem("venueAudioHostCode") || "";
@@ -74,6 +78,60 @@ function LandingPage({
     window.location.assign("/admin");
   };
 
+  const signInPlaceholder = () => {
+    const userName = "Demo Host";
+    localStorage.setItem("sportsAudioDemoUser", userName);
+    setDemoUser(userName);
+    setMode("boxes");
+  };
+
+  const signOutPlaceholder = () => {
+    localStorage.removeItem("sportsAudioDemoUser");
+    setDemoUser("");
+    setMode("menu");
+  };
+
+  if (activeMode === "boxes") {
+    return (
+      <MyAudioBoxesDashboard
+        isSocketConnected={isSocketConnected}
+        onBack={() => setMode("menu")}
+      />
+    );
+  }
+
+  if (activeMode === "auth") {
+    return (
+      <div className="page-shell">
+        <div className="main-card landing-card compact-landing">
+          <button className="back-button" onClick={() => setMode("menu")}>
+            Back
+          </button>
+
+          <div className="brand-block centered-brand">
+            <h1 className="app-title">Login / Sign Up</h1>
+            <p className="app-subtitle">
+              Account auth arrives in Phase 2. For now, continue into the
+              appliance dashboard with the admin PIN fallback.
+            </p>
+          </div>
+
+          {statusMessage && <div className="status-banner">{statusMessage}</div>}
+
+          <div className="compact-actions">
+            <button className="primary-button" onClick={signInPlaceholder}>
+              Continue as Demo Host
+            </button>
+
+            <button className="secondary-button" onClick={() => setMode("listener")}>
+              Join Audio Instead
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (activeMode === "host") {
     return (
       <div className="page-shell">
@@ -120,15 +178,23 @@ function LandingPage({
 
               <button
                 className="primary-button"
+                onClick={() => setMode(demoUser ? "boxes" : "auth")}
+                disabled={!isSocketConnected}
+              >
+                {demoUser ? "My Audio Boxes" : "Login / Sign Up"}
+              </button>
+
+              <button
+                className="secondary-button"
                 onClick={openApplianceControl}
                 disabled={!isSocketConnected}
               >
-                Manage Audio Boxes
+                Admin PIN Fallback
               </button>
 
               <p className="small-note">
-                Admin PIN required. Use this to control connected Raspberry Pi
-                audio appliances.
+                Physical box hosting is managed separately from browser host
+                mode.
               </p>
             </div>
 
@@ -267,7 +333,7 @@ function LandingPage({
 
   return (
     <div className="page-shell">
-      <div className="main-card landing-card compact-landing">
+      <div className="main-card landing-card app-home-card">
         <div className="brand-block centered-brand">
           <h1 className="app-title">Venue Audio</h1>
           <p className="app-subtitle">Hear live audio from a nearby screen.</p>
@@ -284,8 +350,33 @@ function LandingPage({
         </div>
 
         <div className="compact-actions">
+          {demoUser ? (
+            <div className="signed-in-strip">
+              <span>Signed in as {demoUser}</span>
+              <button className="ghost-link-button" onClick={signOutPlaceholder}>
+                Sign Out
+              </button>
+            </div>
+          ) : (
+            <button
+              className="ghost-button"
+              onClick={() => setMode("auth")}
+            >
+              Login / Sign Up
+            </button>
+          )}
+
+          {demoUser && (
+            <button
+              className="primary-button"
+              onClick={() => setMode("boxes")}
+            >
+              My Audio Boxes
+            </button>
+          )}
+
           <button
-            className="primary-button"
+            className={demoUser ? "secondary-button" : "primary-button"}
             onClick={() => {
               if (!roomId && savedHostCode) {
                 setRoomId(savedHostCode);
@@ -298,7 +389,7 @@ function LandingPage({
           </button>
 
           <button
-            className="secondary-button"
+            className="primary-button"
             onClick={() => setMode("listener")}
           >
             Join Audio

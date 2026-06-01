@@ -18,7 +18,8 @@ const DEFAULT_CONFIG = {
   roomName: process.env.SPORTSYNC_ROOM_NAME || "Home Audio",
   audioDevice: process.env.SPORTSYNC_AUDIO_DEVICE || "auto",
   enabled: process.env.SPORTSYNC_AUDIO_ENABLED !== "false",
-  roomActive: process.env.SPORTSYNC_ROOM_ACTIVE !== "false"
+  roomActive: process.env.SPORTSYNC_ROOM_ACTIVE !== "false",
+  isPublic: process.env.SPORTSYNC_ROOM_PUBLIC !== "false"
 };
 let audioDevice = null;
 const SAMPLE_RATE = Number(process.env.SPORTSYNC_SAMPLE_RATE || 44100);
@@ -72,6 +73,7 @@ let roomName = applianceConfigState.roomName || roomCode;
 let audioDeviceSetting = applianceConfigState.audioDevice || "auto";
 let audioEnabled = applianceConfigState.enabled !== false;
 let roomActive = applianceConfigState.roomActive !== false;
+let isPublic = applianceConfigState.isPublic !== false;
 let commandSocket = null;
 const startedAt = Date.now();
 
@@ -134,6 +136,7 @@ const getStatusPayload = () => ({
   isAudioEnabled: audioEnabled,
   roomActive,
   audioEnabled,
+  isPublic,
   audioStatus: audioEnabled && arecord ? "running" : "stopped",
   uptime: Math.floor((Date.now() - startedAt) / 1000),
   lastHeartbeat: new Date().toISOString(),
@@ -513,6 +516,7 @@ const applyConfig = (updates = {}) => {
   applianceConfigState.audioDevice = applianceConfigState.audioDevice || "auto";
   applianceConfigState.enabled = applianceConfigState.enabled !== false;
   applianceConfigState.roomActive = applianceConfigState.roomActive !== false;
+  applianceConfigState.isPublic = applianceConfigState.isPublic !== false;
 
   applianceId = applianceConfigState.applianceId || applianceId;
   displayName = applianceConfigState.displayName || applianceId;
@@ -521,6 +525,7 @@ const applyConfig = (updates = {}) => {
   audioDeviceSetting = applianceConfigState.audioDevice;
   audioEnabled = applianceConfigState.enabled;
   roomActive = applianceConfigState.roomActive;
+  isPublic = applianceConfigState.isPublic;
   writeApplianceConfig();
 };
 
@@ -571,6 +576,10 @@ const applySettingsCommand = async ({ settings = {} } = {}) => {
 
   if (typeof settings.roomCode === "string" && sanitizeRoomCode(settings.roomCode)) {
     updates.roomCode = sanitizeRoomCode(settings.roomCode);
+  }
+
+  if (typeof settings.isPublic === "boolean") {
+    updates.isPublic = settings.isPublic;
   }
 
   if (Object.keys(updates).length === 0) {
