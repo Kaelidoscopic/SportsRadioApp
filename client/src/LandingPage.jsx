@@ -440,7 +440,7 @@ function LandingPage({
               disabled={!isSocketConnected}
             >
               <span className="action-card-title">Browser Audio</span>
-              <span className="action-card-copy">Broadcast from this phone or computer.</span>
+              <span className="action-card-copy">Host live audio from this device.</span>
             </button>
 
             <button
@@ -448,8 +448,8 @@ function LandingPage({
               onClick={() => setMode("boxes")}
               disabled={!isSocketConnected}
             >
-              <span className="action-card-title">Host Device</span>
-              <span className="action-card-copy">Manage a linked audio box.</span>
+              <span className="action-card-title">Host Device / Audio Box</span>
+              <span className="action-card-copy">Control a linked physical audio box.</span>
             </button>
           </div>
 
@@ -491,7 +491,7 @@ function LandingPage({
               onClick={handleCreateRoom}
               disabled={!isSocketConnected}
             >
-              Start Room
+              Start Broadcast
             </button>
           </div>
         </div>

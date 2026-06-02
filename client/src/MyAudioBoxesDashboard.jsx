@@ -355,12 +355,14 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
             sendCommand(
               box.applianceId,
               box.isAudioEnabled ? "stop-audio" : "start-audio",
-              box.isAudioEnabled ? "Audio stop command sent." : "Audio start command sent."
+              box.isAudioEnabled
+                ? "Stop broadcast command sent."
+                : "Start broadcast command sent."
             )
           }
           disabled={!box.isOnline}
         >
-          {box.isAudioEnabled ? "Turn Audio Off" : "Turn Audio On"}
+          {box.isAudioEnabled ? "Stop Broadcast" : "Start Broadcast"}
         </button>
         <button
           className="ghost-button"
@@ -373,7 +375,7 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
           }
           disabled={!box.isOnline}
         >
-          {box.isRoomActive ? "Deactivate" : "Activate"}
+          {box.isRoomActive ? "Deactivate Room" : "Activate Room"}
         </button>
       </div>
 
@@ -584,7 +586,7 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
               </div>
             </div>
 
-            <div className="share-actions">
+            <div className="share-actions box-primary-actions">
               <button
                 className="secondary-button"
                 onClick={() => openQrPageForBox(selectedBox)}
@@ -600,45 +602,39 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
                 Print QR Code
               </button>
               <button
-                className="primary-button"
+                className={selectedBox.isAudioEnabled ? "secondary-button" : "primary-button"}
                 onClick={() =>
-                  sendCommand(selectedBox.applianceId, "start-audio", "Audio start command sent.")
+                  sendCommand(
+                    selectedBox.applianceId,
+                    selectedBox.isAudioEnabled ? "stop-audio" : "start-audio",
+                    selectedBox.isAudioEnabled
+                      ? "Stop broadcast command sent."
+                      : "Start broadcast command sent."
+                  )
                 }
                 disabled={!selectedBox.isOnline}
               >
-                Start Audio
+                {selectedBox.isAudioEnabled ? "Stop Broadcast" : "Start Broadcast"}
               </button>
               <button
-                className="secondary-button"
+                className={selectedBox.isRoomActive ? "secondary-button" : "primary-button"}
                 onClick={() =>
-                  sendCommand(selectedBox.applianceId, "stop-audio", "Audio stop command sent.")
+                  sendCommand(
+                    selectedBox.applianceId,
+                    selectedBox.isRoomActive ? "deactivate-room" : "activate-room",
+                    selectedBox.isRoomActive
+                      ? "Room deactivate command sent."
+                      : "Room activate command sent."
+                  )
                 }
                 disabled={!selectedBox.isOnline}
               >
-                Stop Audio
-              </button>
-              <button
-                className="primary-button"
-                onClick={() =>
-                  sendCommand(selectedBox.applianceId, "activate-room", "Room activate command sent.")
-                }
-                disabled={!selectedBox.isOnline}
-              >
-                Activate Room
-              </button>
-              <button
-                className="secondary-button"
-                onClick={() =>
-                  sendCommand(selectedBox.applianceId, "deactivate-room", "Room deactivate command sent.")
-                }
-                disabled={!selectedBox.isOnline}
-              >
-                Deactivate Room
+                {selectedBox.isRoomActive ? "Deactivate Room" : "Activate Room"}
               </button>
             </div>
 
-            <div className="panel-card">
-              <h2 className="section-title">Diagnostics</h2>
+            <details className="panel-card advanced-panel">
+              <summary className="advanced-summary">Advanced / Diagnostics</summary>
               <div className="diagnostic-list">
                 <span>ID: {selectedBox.applianceId}</span>
                 <span>Owner: {selectedBox.ownerUserId ? "Linked to account" : "Unlinked"}</span>
@@ -646,7 +642,7 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
                 <span>Current audio device: reported by Pi logs</span>
                 <span>Uptime: tracked by appliance service</span>
               </div>
-            </div>
+            </details>
           </div>
         ) : (
           <>

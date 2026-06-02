@@ -509,10 +509,27 @@ select:disabled {
   margin-top: 1rem;
 }
 
+.box-primary-actions {
+  margin-bottom: 0;
+}
+
 .box-settings-layout {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.advanced-panel {
+  color: #d7deea;
+}
+
+.advanced-summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.advanced-panel .diagnostic-list {
+  margin-top: 1rem;
 }
 
 .ghost-link-button {

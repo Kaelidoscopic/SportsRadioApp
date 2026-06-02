@@ -22,6 +22,8 @@ function HostDashboard({
   const joinLink = currentRoom
     ? `${frontendUrl}/?room=${currentRoom}`
     : "";
+  const sourceName =
+    broadcastSourceType === "tab" ? "Browser Tab / Screen" : "Browser Audio";
 
   const copyJoinLink = async () => {
     if (!joinLink) return;
@@ -55,8 +57,11 @@ function HostDashboard({
     <div className="page-shell">
       <div className="main-card dashboard-card host-card simple-host-card">
         <div className="brand-block centered-brand">
-          <h1 className="app-title">Broadcasting</h1>
-          <p className="app-subtitle">Room code</p>
+          <span className="metric-label">Source</span>
+          <h1 className="app-title">{sourceName}</h1>
+          <p className="app-subtitle">
+            {isBroadcasting ? "Broadcasting now" : "Ready to start"}
+          </p>
         </div>
 
         <div className="room-code-card host-room-card">
@@ -73,9 +78,9 @@ function HostDashboard({
           </div>
 
           <div className="metric-card">
-            <span className="metric-label">Connection</span>
+            <span className="metric-label">Broadcast</span>
             <span className="metric-value">
-              {isSocketConnected ? "Connected" : "Offline"}
+              {isBroadcasting ? "Live" : isSocketConnected ? "Ready" : "Offline"}
             </span>
           </div>
         </div>
@@ -96,6 +101,7 @@ function HostDashboard({
 
         {!isBroadcasting && (
           <div className="panel-card host-controls">
+            <span className="metric-label">Audio Source</span>
             <select
               className="audio-select"
               value={broadcastSourceType}
@@ -147,9 +153,11 @@ function HostDashboard({
             </button>
           )}
 
-          <button className="ghost-button" onClick={leaveRoom}>
-            End Room
-          </button>
+          {!isBroadcasting && (
+            <button className="ghost-button" onClick={leaveRoom}>
+              End Room
+            </button>
+          )}
         </div>
       </div>
     </div>
