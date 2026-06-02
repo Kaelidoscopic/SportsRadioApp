@@ -823,6 +823,7 @@ function App() {
     });
 
     socket.on("room-closed", (msg) => {
+      console.log("Listener received room closed event:", msg);
       clearRoomRejoinTimer();
       cleanupAllConnections();
       stopBroadcastTracksOnly();

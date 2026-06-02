@@ -630,6 +630,34 @@ const markApplianceOffline = (roomId, reason = "Pi host is offline.") => {
   emitApplianceList();
 };
 
+const deactivateApplianceRoom = (
+  appliance,
+  reason = "Appliance room deactivated."
+) => {
+  if (!appliance?.roomCode) return;
+
+  const roomId = sanitizeRoomCode(appliance.roomCode);
+  const room = rooms[roomId];
+
+  appliance.isRoomActive = false;
+  appliance.isAudioEnabled = false;
+  appliance.listenerCount = room?.listeners.length || 0;
+  appliance.updatedAt = nowIso();
+  saveApplianceRecord(appliance);
+
+  console.log(
+    `Box room deactivated: appliance=${appliance.applianceId} room=${roomId} listeners=${appliance.listenerCount} reason="${reason}"`
+  );
+
+  if (room?.hostType === "appliance") {
+    closeRoom(roomId, "This audio room has ended.");
+  } else {
+    emitRoomsList();
+  }
+
+  emitApplianceList();
+};
+
 setInterval(() => {
   const now = Date.now();
 
@@ -1510,12 +1538,7 @@ app.post("/api/my/appliances/:applianceId/deactivate-room", (req, res) => {
     return;
   }
 
-  appliance.isRoomActive = false;
-  appliance.isAudioEnabled = false;
-  appliance.updatedAt = nowIso();
-  saveApplianceRecord(appliance);
-  markApplianceOffline(appliance.roomCode, "Owner deactivated appliance room.");
-  emitApplianceList();
+  deactivateApplianceRoom(appliance, "Owner deactivated appliance room.");
   res.json({ appliance: toApplianceDto(appliance), delivered: true });
 });
 
@@ -1617,12 +1640,7 @@ app.post("/api/appliances/:applianceId/deactivate-room", (req, res) => {
     return;
   }
 
-  appliance.isRoomActive = false;
-  appliance.isAudioEnabled = false;
-  appliance.updatedAt = nowIso();
-  saveApplianceRecord(appliance);
-  markApplianceOffline(appliance.roomCode, "Admin deactivated appliance room.");
-  emitApplianceList();
+  deactivateApplianceRoom(appliance, "Admin deactivated appliance room.");
   res.json({ appliance: toApplianceDto(appliance), delivered: true });
 });
 
