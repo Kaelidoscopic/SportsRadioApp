@@ -89,7 +89,7 @@ function App() {
   const [applianceDetails, setApplianceDetails] = useState(null);
   const [preferredLandingMode, setPreferredLandingMode] = useState(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.get("room") ? "join" : null;
+    return params.get("room") ? "connecting" : null;
   });
   const [needsUserAudioGesture, setNeedsUserAudioGesture] = useState(false);
 
@@ -934,10 +934,18 @@ function App() {
 
         linkJoinRoomRef.current = "";
         linkJoinRetryCountRef.current = 0;
-        setMessage(
-          "Saved room is not online yet. Start the Pi host or tap Join Audio to try again."
-        );
+        setMessage("Room is not online yet. Try another code or scan again.");
         setPreferredLandingMode("join");
+        setRoomId("");
+        return;
+      }
+
+      if (linkJoinRoomRef.current) {
+        linkJoinRoomRef.current = "";
+        linkJoinRetryCountRef.current = 0;
+        setPreferredLandingMode("join");
+        setRoomId("");
+        setMessage(msg);
         return;
       }
 
@@ -1406,7 +1414,8 @@ function App() {
         applianceAutoStartAttemptedRef.current = false;
         setNeedsUserAudioGesture(false);
         setUserPausedListening(false);
-        setPreferredLandingMode("join");
+        setRoomId(cleanRoomCode);
+        setPreferredLandingMode("connecting");
         setMessage(`Joining room ${cleanRoomCode}...`);
         requestJoinRoom(cleanRoomCode);
       }, 300);
@@ -1522,6 +1531,7 @@ function App() {
       resumeApplianceAudio={resumeApplianceAudioFromGesture}
       needsUserAudioGesture={needsUserAudioGesture}
       remoteAudioRef={remoteAudioRef}
+      listenerCount={Math.max(members.length - 1, 0)}
       isSocketConnected={isSocketConnected}
     />
   );

@@ -301,6 +301,26 @@ function LandingPage({
     );
   }
 
+  if (activeMode === "connecting") {
+    return (
+      <div className="page-shell">
+        <div className="main-card compact-landing synclink-screen connecting-card">
+          <div className="brand-block centered-brand">
+            <div className="loading-dot" />
+            <h1 className="app-title">Connecting...</h1>
+            <p className="app-subtitle">
+              {roomId ? `Joining ${roomId}` : "Joining audio"}
+            </p>
+          </div>
+
+          <button className="ghost-button" onClick={() => setMode("join")}>
+            Back to Join Audio
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (activeMode === "enter-code") {
     return (
       <div className="page-shell">
@@ -317,7 +337,7 @@ function LandingPage({
             <input
               className="room-input room-code-input"
               type="text"
-              placeholder="Room code"
+              placeholder="Enter code"
               value={roomId}
               onChange={(event) => setRoomId(cleanRoomCode(event.target.value))}
               onKeyDown={handleJoinKeyDown}
@@ -371,7 +391,9 @@ function LandingPage({
               ))}
             </div>
           ) : (
-            <div className="status-banner">No nearby rooms are listed yet.</div>
+            <p className="small-note roomy-note">
+              No nearby rooms are listed yet. Scan a QR code or enter a room code.
+            </p>
           )}
         </div>
       </div>

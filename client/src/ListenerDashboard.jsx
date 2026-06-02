@@ -9,12 +9,14 @@ function ListenerDashboard({
   resumeApplianceAudio,
   needsUserAudioGesture = false,
   remoteAudioRef,
+  listenerCount = 0,
   isSocketConnected
 }) {
   const roomLabel =
     sourceName ||
     (hostType === "appliance" ? `TV Audio - ${currentRoom}` : `Room ${currentRoom}`);
   const isConnected = isSocketConnected && isHostLive;
+  const statusText = isConnected ? "LIVE" : isSocketConnected ? "Connected" : "Disconnected";
   const shouldShowStartButton = !isListening || needsUserAudioGesture;
 
   const handleStart = () => {
@@ -36,13 +38,12 @@ function ListenerDashboard({
           </p>
         </div>
 
-        <div className="simple-status-row">
-          <div className={`live-pill ${isHostLive ? "live" : "offline"}`}>
-            {isHostLive ? "LIVE" : "OFFLINE"}
+        <div className="listener-status-stack">
+          <div className={`live-pill ${isConnected ? "live" : "offline"}`}>
+            {statusText}
           </div>
-
-          <div className={`connection-pill ${isSocketConnected ? "live" : "offline"}`}>
-            {isSocketConnected ? "Connected" : "Disconnected"}
+          <div className="listener-count-label">
+            {listenerCount} {listenerCount === 1 ? "listener" : "listeners"}
           </div>
         </div>
 
