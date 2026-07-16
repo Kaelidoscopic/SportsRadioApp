@@ -6,6 +6,12 @@ const path = require("path");
 const { DatabaseSync } = require("node:sqlite");
 const cors = require("cors");
 const { Server } = require("socket.io");
+const {
+  AUDIO_EVENT,
+  DEFAULT_MAX_AUDIO_CHUNK_BYTES,
+  createApplianceAudioHandler,
+  validateAudioChunk
+} = require("./appliance-audio");
 require("dotenv").config();
 
 const app = express();
@@ -27,6 +33,9 @@ const APPLIANCE_OFFLINE_AFTER_MS = 10000;
 const appliances = {};
 const applianceSockets = {};
 const adminSockets = new Set();
+const MAX_AUDIO_CHUNK_BYTES = Number(
+  process.env.SPORTSYNC_MAX_AUDIO_CHUNK_BYTES || DEFAULT_MAX_AUDIO_CHUNK_BYTES
+);
 
 const DB_PATH =
   process.env.SPORTSYNC_DB_PATH ||
@@ -559,6 +568,15 @@ const sanitizeRoomCode = (code) => {
   return code.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
 };
 
+const handleApplianceAudioChunk = createApplianceAudioHandler({
+  rooms,
+  appliances,
+  applianceSockets,
+  isAuthorized: isAuthorizedApplianceSocket,
+  sanitizeRoomCode,
+  maxChunkBytes: MAX_AUDIO_CHUNK_BYTES
+});
+
 const createRoomState = ({
   hostSocketId,
   hostType = "browser",
@@ -1068,13 +1086,23 @@ io.on("connection", (socket) => {
       return;
     }
 
-    updateApplianceStatus(payload, socket.id);
+    const appliance = updateApplianceStatus(payload, socket.id);
+    if (!appliance) {
+      console.warn(`Appliance registration rejected: socket=${socket.id} missing identity.`);
+      socket.emit("admin:error", "Appliance identity is required.");
+      return;
+    }
+    socket.data.applianceId = appliance.applianceId;
     socket.emit("appliance:registered", { ok: true });
   });
 
   socket.on("appliance:status", (payload = {}) => {
     if (!isAuthorizedApplianceSocket(socket)) return;
     updateApplianceStatus(payload, socket.id);
+  });
+
+  socket.on(AUDIO_EVENT, (payload = {}) => {
+    handleApplianceAudioChunk(socket, payload);
   });
 
   socket.on("admin:authenticate", ({ pin } = {}, callback) => {
@@ -1209,22 +1237,54 @@ app.post("/api/appliance/rooms/:roomCode/stop", (req, res) => {
   res.json({ ok: true, roomId });
 });
 
+const httpAudioDiagnosticAt = new Map();
+const logHttpAudioDiagnostic = (
+  reason,
+  roomId,
+  details = "",
+  intervalMs = 5000
+) => {
+  const key = `${reason}:${roomId || "unknown"}`;
+  const now = Date.now();
+  if (now - (httpAudioDiagnosticAt.get(key) || 0) < intervalMs) return;
+  httpAudioDiagnosticAt.set(key, now);
+  console.warn(
+    `Deprecated HTTP appliance audio: room=${roomId || "unknown"} reason=${reason}${
+      details ? ` ${details}` : ""
+    }`
+  );
+};
+
 app.post(
   "/api/appliance/rooms/:roomCode/audio",
   express.raw({ type: "*/*", limit: "1mb" }),
   (req, res) => {
-    if (!requireApplianceToken(req, res)) return;
-
     const roomId = sanitizeRoomCode(req.params.roomCode || "");
-    const room = rooms[roomId];
+    res.set("Warning", '299 - "Deprecated audio transport; use Socket.IO appliance:audio-chunk"');
+    if (!requireApplianceToken(req, res)) {
+      logHttpAudioDiagnostic("unauthorized", roomId);
+      return;
+    }
+    logHttpAudioDiagnostic("fallback-in-use", roomId, "transport=http", 60000);
 
-    if (!room || room.hostType !== "appliance" || !room.hostSocketId) {
-      res.status(404).json({ error: "Appliance room is not online." });
+    const validation = validateAudioChunk(req.body, MAX_AUDIO_CHUNK_BYTES);
+    if (!validation.ok) {
+      const bytes = Buffer.isBuffer(req.body) ? req.body.length : 0;
+      logHttpAudioDiagnostic(validation.reason, roomId, `bytes=${bytes}`);
+      res.status(400).json({
+        error:
+          validation.reason === "oversized-chunk"
+            ? `Audio payload exceeds ${MAX_AUDIO_CHUNK_BYTES} bytes.`
+            : "A non-empty binary audio payload is required."
+      });
       return;
     }
 
-    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
-      res.status(400).json({ error: "Audio payload is required." });
+    const room = rooms[roomId];
+
+    if (!room || room.hostType !== "appliance" || !room.hostSocketId) {
+      logHttpAudioDiagnostic("room-unavailable", roomId);
+      res.status(404).json({ error: "Appliance room is not online." });
       return;
     }
 
@@ -1232,6 +1292,11 @@ app.post(
       ...(room.appliance || {}),
       lastSeen: Date.now()
     };
+    const appliance = appliances[room.appliance.applianceId];
+    if (appliance) {
+      appliance.lastHeartbeat = nowIso();
+      appliance.isOnline = true;
+    }
 
     io.to(roomId).emit("appliance-audio-chunk", {
       roomId,

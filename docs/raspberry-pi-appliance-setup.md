@@ -72,6 +72,8 @@ SPORTSYNC_AUDIO_DEVICE=auto
 
 Advanced settings include `SPORTSYNC_CONFIG_PATH`, `SPORTSYNC_SAMPLE_RATE`, `SPORTSYNC_CHANNELS`, `SPORTSYNC_CHUNK_BYTES`, `SPORTSYNC_HTTP_TIMEOUT_MS`, `SPORTSYNC_RETRY_BASE_DELAY_MS`, `SPORTSYNC_RETRY_MAX_DELAY_MS`, and `SPORTSYNC_ROOM_404_EXIT_AFTER_MS`.
 
+Live PCM audio uses the Pi's existing authenticated Socket.IO connection and the volatile `appliance:audio-chunk` event. Chunks are never queued by the application: they are dropped when the socket is unavailable, its transport is backpressured, or its small buffer ceiling is reached. `SPORTSYNC_MAX_AUDIO_CHUNK_BYTES` and `SPORTSYNC_MAX_BUFFERED_AUDIO_BYTES` both default to 65536. The older HTTP audio endpoint remains available only as a deprecated compatibility fallback.
+
 ## Audio-device configuration
 
 List capture devices:

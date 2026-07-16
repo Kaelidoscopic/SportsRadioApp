@@ -7,6 +7,12 @@ const path = require("path");
 const { io } = require("socket.io-client");
 const packageJson = require("./package.json");
 const {
+  DEFAULT_MAX_AUDIO_CHUNK_BYTES,
+  DEFAULT_MAX_BUFFERED_AUDIO_BYTES,
+  createCaptureChunkHandler,
+  createLiveAudioSender
+} = require("./appliance-audio");
+const {
   getDefaultConfigPath,
   loadBoxConfig,
   normalizeBoxConfig,
@@ -20,6 +26,13 @@ let audioDevice = null;
 const SAMPLE_RATE = Number(process.env.SPORTSYNC_SAMPLE_RATE || 44100);
 const CHANNELS = Number(process.env.SPORTSYNC_CHANNELS || 2);
 const CHUNK_BYTES = Number(process.env.SPORTSYNC_CHUNK_BYTES || 8192);
+const MAX_AUDIO_CHUNK_BYTES = Number(
+  process.env.SPORTSYNC_MAX_AUDIO_CHUNK_BYTES || DEFAULT_MAX_AUDIO_CHUNK_BYTES
+);
+const MAX_BUFFERED_AUDIO_BYTES = Number(
+  process.env.SPORTSYNC_MAX_BUFFERED_AUDIO_BYTES ||
+    DEFAULT_MAX_BUFFERED_AUDIO_BYTES
+);
 const PI_HOST_TOKEN = process.env.PI_HOST_TOKEN || "";
 const HTTP_TIMEOUT_MS = Number(process.env.SPORTSYNC_HTTP_TIMEOUT_MS || 10000);
 const RETRY_BASE_DELAY_MS = Number(
@@ -153,6 +166,20 @@ let retryTimer = null;
 let retryAttempt = 0;
 let roomMissingSince = null;
 let audioDetectionTimer = null;
+let captureDataHandler = null;
+let captureStream = null;
+
+const audioSender = createLiveAudioSender({
+  getSocket: () => commandSocket,
+  getMetadata: () => ({
+    roomCode,
+    sampleRate: SAMPLE_RATE,
+    channels: CHANNELS,
+    encoding: "pcm_s16le"
+  }),
+  maxChunkBytes: MAX_AUDIO_CHUNK_BYTES,
+  maxBufferedBytes: MAX_BUFFERED_AUDIO_BYTES
+});
 
 const setBackendOnline = (online) => {
   if (backendOnline === online) return;
@@ -334,14 +361,6 @@ const sendHeartbeat = async () => {
   }
 };
 
-const sendAudioChunk = async (chunk) => {
-  await request(
-    applianceRoomPath("audio"),
-    chunk,
-    "application/octet-stream"
-  );
-};
-
 const detectUsbAudioDevice = () =>
   new Promise((resolve, reject) => {
     execFile("arecord", ["-l"], (error, stdout, stderr) => {
@@ -409,9 +428,20 @@ const stopCapture = () => {
     audioDetectionTimer = null;
   }
 
-  if (arecord) {
-    arecord.kill("SIGTERM");
-    arecord = null;
+  const captureProcess = arecord;
+  const stdout = captureStream;
+  const dataHandler = captureDataHandler;
+
+  arecord = null;
+  captureStream = null;
+  captureDataHandler = null;
+
+  if (stdout && dataHandler) {
+    stdout.removeListener("data", dataHandler);
+  }
+
+  if (captureProcess && !captureProcess.killed) {
+    captureProcess.kill("SIGTERM");
   }
 
   setAudioUploading(false);
@@ -430,7 +460,7 @@ const startCapture = () => {
         return;
       }
 
-      arecord = spawn("arecord", [
+      const captureProcess = spawn("arecord", [
         "-D",
         device,
         "-f",
@@ -444,30 +474,31 @@ const startCapture = () => {
         "--buffer-size",
         String(CHUNK_BYTES)
       ]);
+      const stdout = captureProcess.stdout;
+      arecord = captureProcess;
+      captureStream = stdout;
       console.log(`Audio capture started on ${device}.`);
 
-      arecord.stdout.on("data", async (chunk) => {
-        arecord.stdout.pause();
-
-        try {
-          if (!roomRegistered) {
-            scheduleRetry();
-            return;
+      const dataHandler = createCaptureChunkHandler({
+        stream: stdout,
+        isCurrentStream: () =>
+          arecord === captureProcess && captureStream === stdout,
+        isShuttingDown: () => shuttingDown,
+        isRoomRegistered: () => roomRegistered,
+        sendChunk: (chunk) => {
+          const sent = audioSender.send(chunk);
+          if (sent) {
+            setBackendOnline(true);
           }
-
-          await sendAudioChunk(chunk);
-          setBackendOnline(true);
-          setAudioUploading(true);
-        } catch (error) {
-          await handleRecoverableError("Audio upload", error);
-        } finally {
-          if (!shuttingDown) {
-            arecord.stdout.resume();
-          }
-        }
+          return sent;
+        },
+        scheduleRetry,
+        setAudioUploading
       });
+      captureDataHandler = dataHandler;
+      stdout.on("data", dataHandler);
 
-      arecord.stderr.on("data", (chunk) => {
+      captureProcess.stderr.on("data", (chunk) => {
         const text = chunk.toString("utf8").trim();
 
         if (text) {
@@ -475,10 +506,19 @@ const startCapture = () => {
         }
       });
 
-      arecord.on("exit", (code, signal) => {
-        arecord = null;
+      captureProcess.on("exit", (code, signal) => {
+        stdout.removeListener("data", dataHandler);
+        if (arecord === captureProcess) {
+          arecord = null;
+        }
+        if (captureStream === stdout) {
+          captureStream = null;
+        }
+        if (captureDataHandler === dataHandler) {
+          captureDataHandler = null;
+        }
 
-        if (!shuttingDown) {
+        if (!shuttingDown && audioEnabled && roomActive) {
           console.error(`arecord exited with code ${code} signal ${signal}.`);
           console.error("Restarting audio capture in 3s.");
           scheduleCaptureStart();
@@ -822,6 +862,9 @@ const main = async () => {
   console.log(`Start endpoint: ${applianceRoomPath("start")}`);
   console.log(`Heartbeat endpoint: ${applianceRoomPath("heartbeat")}`);
   console.log(`Audio endpoint: ${applianceRoomPath("audio")}`);
+  console.log(
+    `Live audio transport: Socket.IO volatile binary events (buffer limit ${MAX_BUFFERED_AUDIO_BYTES} bytes).`
+  );
 
   connectCommandSocket();
 
