@@ -87,6 +87,16 @@ db.exec(`
   );
 `);
 
+const ensureColumn = (tableName, columnName, columnDefinition) => {
+  const columns = db.prepare(`PRAGMA table_info(${tableName})`).all();
+
+  if (!columns.some((column) => column.name === columnName)) {
+    db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`);
+  }
+};
+
+ensureColumn("appliances", "now_playing", "TEXT");
+
 const nowIso = () => new Date().toISOString();
 
 const boolToInt = (value) => (value ? 1 : 0);
@@ -126,6 +136,8 @@ const rowToAppliance = (row) =>
         displayName: row.display_name,
         roomCode: row.room_code,
         roomName: row.room_name,
+        sourceName: row.room_name,
+        nowPlaying: row.now_playing || "",
         isPublic: Boolean(row.is_public),
         isOnline: Boolean(row.is_online),
         isAudioEnabled: Boolean(row.is_audio_enabled),
@@ -148,6 +160,7 @@ const saveApplianceRecord = (appliance) => {
         display_name,
         room_code,
         room_name,
+        now_playing,
         is_public,
         is_online,
         is_audio_enabled,
@@ -159,11 +172,12 @@ const saveApplianceRecord = (appliance) => {
         created_at,
         updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(appliance_id) DO UPDATE SET
         display_name = excluded.display_name,
         room_code = excluded.room_code,
         room_name = excluded.room_name,
+        now_playing = excluded.now_playing,
         is_public = excluded.is_public,
         is_online = excluded.is_online,
         is_audio_enabled = excluded.is_audio_enabled,
@@ -179,6 +193,7 @@ const saveApplianceRecord = (appliance) => {
     appliance.displayName,
     appliance.roomCode,
     appliance.roomName,
+    appliance.nowPlaying || "",
     boolToInt(appliance.isPublic !== false),
     boolToInt(appliance.isOnline),
     boolToInt(appliance.isAudioEnabled),
@@ -316,7 +331,7 @@ const requireAdminPin = (req, res) => {
 const getManagedAppliance = (applianceId) => appliances[applianceId] || null;
 
 const createOrUpdateManagedAppliance = (payload = {}, socketId = null) => {
-  const applianceId = String(payload.applianceId || "").trim();
+  const applianceId = String(payload.deviceId || payload.applianceId || "").trim();
 
   if (!applianceId) return null;
 
@@ -334,6 +349,8 @@ const createOrUpdateManagedAppliance = (payload = {}, socketId = null) => {
   const isRoomActive =
     typeof payload.isRoomActive === "boolean"
       ? payload.isRoomActive
+      : typeof payload.active === "boolean"
+        ? payload.active
       : typeof payload.roomActive === "boolean"
         ? payload.roomActive
       : Boolean(existing.isRoomActive || room?.hostSocketId);
@@ -341,12 +358,23 @@ const createOrUpdateManagedAppliance = (payload = {}, socketId = null) => {
 
   appliances[applianceId] = {
     applianceId,
+    deviceId: applianceId,
     ownerUserId: existing.ownerUserId || payload.ownerUserId || getOwnerUserId(applianceId),
     pairingCode:
       payload.pairingCode || existing.pairingCode || String(applianceId).toUpperCase(),
-    displayName: payload.displayName || payload.name || existing.displayName || applianceId,
+    displayName:
+      payload.deviceName ||
+      payload.displayName ||
+      payload.name ||
+      existing.displayName ||
+      applianceId,
     roomCode,
-    roomName: payload.roomName || existing.roomName || roomCode,
+    roomName: payload.sourceName || payload.roomName || existing.roomName || roomCode,
+    sourceName: payload.sourceName || payload.roomName || existing.roomName || roomCode,
+    nowPlaying:
+      typeof payload.nowPlaying === "string"
+        ? payload.nowPlaying.trim()
+        : existing.nowPlaying || "",
     isPublic:
       typeof payload.isPublic === "boolean"
         ? payload.isPublic
@@ -360,6 +388,8 @@ const createOrUpdateManagedAppliance = (payload = {}, socketId = null) => {
     updatedAt: timestamp,
     audioStatus: payload.audioStatus || existing.audioStatus || "unknown",
     uptime: Number(payload.uptime) || existing.uptime || 0,
+    softwareVersion: payload.softwareVersion || existing.softwareVersion || null,
+    boxHostType: payload.boxHostType || payload.hostType || existing.boxHostType || "box",
     socketId: socketId || existing.socketId || null
   };
 
@@ -375,11 +405,14 @@ const toApplianceDto = (appliance) => {
   const room = rooms[appliance.roomCode];
 
   return {
+    deviceId: appliance.deviceId || appliance.applianceId,
     applianceId: appliance.applianceId,
     ownerUserId: appliance.ownerUserId || null,
     displayName: appliance.displayName,
     roomCode: appliance.roomCode,
     roomName: appliance.roomName,
+    sourceName: appliance.sourceName || appliance.roomName,
+    nowPlaying: appliance.nowPlaying || "",
     isPublic: appliance.isPublic !== false,
     isOnline: Boolean(appliance.isOnline),
     isAudioEnabled: Boolean(appliance.isAudioEnabled),
@@ -387,7 +420,9 @@ const toApplianceDto = (appliance) => {
     lastHeartbeat: appliance.lastHeartbeat,
     listenerCount: room?.listeners.length || appliance.listenerCount || 0,
     createdAt: appliance.createdAt,
-    updatedAt: appliance.updatedAt
+    updatedAt: appliance.updatedAt,
+    softwareVersion: appliance.softwareVersion || null,
+    boxHostType: appliance.boxHostType || "box"
   };
 };
 
@@ -397,6 +432,8 @@ const getPublicRooms = () =>
     .map(([roomId, room]) => ({
       roomId,
       roomName: room.appliance?.roomName || roomId,
+      sourceName: room.appliance?.sourceName || room.appliance?.roomName || roomId,
+      nowPlaying: room.appliance?.nowPlaying || "",
       isBroadcasting: room.isBroadcasting,
       listenerCount: room.listeners.length,
       hostType: room.hostType || "browser"
@@ -437,6 +474,8 @@ const updateApplianceStatus = (payload = {}, socketId = null) => {
       room.appliance = {
         ...(room.appliance || {}),
         roomName: appliance.roomName,
+        sourceName: appliance.sourceName || appliance.roomName,
+        nowPlaying: appliance.nowPlaying || "",
         isPublic: appliance.isPublic !== false,
         lastSeen: Date.now()
       };
@@ -536,14 +575,29 @@ const createRoomState = ({
 
 const updateApplianceRoom = (roomId, appliance = {}) => {
   const existingRoom = rooms[roomId];
+  const isAudioEnabled =
+    typeof appliance.isAudioEnabled === "boolean"
+      ? appliance.isAudioEnabled
+      : typeof appliance.audioEnabled === "boolean"
+        ? appliance.audioEnabled
+        : appliance.audioStatus
+          ? appliance.audioStatus === "running"
+          : true;
   const nextApplianceState = {
-    applianceId: appliance.applianceId || null,
+    applianceId: appliance.deviceId || appliance.applianceId || null,
     sampleRate: Number(appliance.sampleRate) || 44100,
     channels: Number(appliance.channels) || 2,
     encoding: appliance.encoding || "pcm_s16le",
     label: appliance.label || "Pi audio appliance",
     roomName: appliance.roomName || appliance.displayName || roomId,
+    sourceName:
+      appliance.sourceName ||
+      appliance.roomName ||
+      appliance.displayName ||
+      roomId,
+    nowPlaying: appliance.nowPlaying || "",
     isPublic: appliance.isPublic !== false,
+    isAudioEnabled,
     lastSeen: Date.now()
   };
 
@@ -559,7 +613,7 @@ const updateApplianceRoom = (roomId, appliance = {}) => {
 
     existingRoom.hostSocketId = `${APPLIANCE_HOST_PREFIX}${roomId}`;
     existingRoom.hostType = "appliance";
-    existingRoom.isBroadcasting = true;
+    existingRoom.isBroadcasting = isAudioEnabled;
     existingRoom.appliance = {
       ...existingRoom.appliance,
       ...nextApplianceState
@@ -573,7 +627,7 @@ const updateApplianceRoom = (roomId, appliance = {}) => {
     rooms[roomId] = createRoomState({
       hostSocketId: `${APPLIANCE_HOST_PREFIX}${roomId}`,
       hostType: "appliance",
-      isBroadcasting: true,
+      isBroadcasting: isAudioEnabled,
       appliance: nextApplianceState
     });
   }
@@ -583,7 +637,7 @@ const updateApplianceRoom = (roomId, appliance = {}) => {
 
   io.to(roomId).emit("room-updated", { roomId, members });
   io.to(roomId).emit("broadcast-status", {
-    isBroadcasting: true,
+    isBroadcasting: room.isBroadcasting,
     hostType: "appliance",
     appliance: room.appliance
   });
@@ -594,9 +648,11 @@ const updateApplianceRoom = (roomId, appliance = {}) => {
     roomCode: roomId,
     online: true,
     isRoomActive: true,
-    isAudioEnabled: true,
+    isAudioEnabled,
     roomName: room.appliance?.roomName,
-    audioStatus: "running",
+    sourceName: room.appliance?.sourceName,
+    nowPlaying: room.appliance?.nowPlaying,
+    audioStatus: isAudioEnabled ? "running" : "stopped",
     lastHeartbeat: nowIso()
   });
 
@@ -1257,8 +1313,15 @@ const readApplianceSettingUpdates = (body = {}, currentAppliance, res) => {
     updates.displayName = body.displayName.trim() || currentAppliance.displayName;
   }
 
-  if (typeof body.roomName === "string") {
-    updates.roomName = body.roomName.trim() || currentAppliance.roomName;
+  if (typeof body.sourceName === "string" || typeof body.roomName === "string") {
+    const nextSourceName =
+      typeof body.sourceName === "string" ? body.sourceName : body.roomName;
+    updates.roomName = nextSourceName.trim() || currentAppliance.roomName;
+    updates.sourceName = updates.roomName;
+  }
+
+  if (typeof body.nowPlaying === "string") {
+    updates.nowPlaying = body.nowPlaying.trim();
   }
 
   if (typeof body.roomCode === "string") {
@@ -1515,7 +1578,9 @@ app.post("/api/my/appliances/:applianceId/activate-room", (req, res) => {
   if (
     !sendOwnerApplianceCommand(res, appliance, "appliance:activate-room", {
       roomCode: appliance.roomCode,
-      roomName: appliance.roomName
+      roomName: appliance.roomName,
+      sourceName: appliance.sourceName || appliance.roomName,
+      nowPlaying: appliance.nowPlaying || ""
     })
   ) {
     return;
@@ -1617,7 +1682,9 @@ app.post("/api/appliances/:applianceId/activate-room", (req, res) => {
   if (
     !sendAdminApplianceCommand(res, appliance, "appliance:activate-room", {
       roomCode: appliance.roomCode,
-      roomName: appliance.roomName
+      roomName: appliance.roomName,
+      sourceName: appliance.sourceName || appliance.roomName,
+      nowPlaying: appliance.nowPlaying || ""
     })
   ) {
     return;

@@ -56,7 +56,9 @@ function ApplianceAdminPage({ isSocketConnected }) {
         if (!next[appliance.applianceId]) {
           next[appliance.applianceId] = {
             displayName: appliance.displayName || "",
+            sourceName: appliance.sourceName || appliance.roomName || "",
             roomName: appliance.roomName || "",
+            nowPlaying: appliance.nowPlaying || "",
             roomCode: appliance.roomCode || ""
           };
         }
@@ -226,9 +228,15 @@ function ApplianceAdminPage({ isSocketConnected }) {
                       </span>
                     </div>
                     <div>
-                      <span className="metric-label">Room Name</span>
+                      <span className="metric-label">Source Name</span>
                       <span className="metric-value compact-value">
-                        {appliance.roomName || "Unnamed"}
+                        {appliance.sourceName || appliance.roomName || "Unnamed"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="metric-label">Now Playing</span>
+                      <span className="metric-value compact-value">
+                        {appliance.nowPlaying || "Optional"}
                       </span>
                     </div>
                     <div>
@@ -275,12 +283,25 @@ function ApplianceAdminPage({ isSocketConnected }) {
 
                     <input
                       className="room-input"
-                      placeholder="Room name"
-                      value={edit.roomName || ""}
+                      placeholder="Source name"
+                      value={edit.sourceName || edit.roomName || ""}
                       onChange={(event) =>
                         updateEdit(
                           appliance.applianceId,
-                          "roomName",
+                          "sourceName",
+                          event.target.value
+                        )
+                      }
+                    />
+
+                    <input
+                      className="room-input"
+                      placeholder="Now playing (optional)"
+                      value={edit.nowPlaying || ""}
+                      onChange={(event) =>
+                        updateEdit(
+                          appliance.applianceId,
+                          "nowPlaying",
                           event.target.value
                         )
                       }

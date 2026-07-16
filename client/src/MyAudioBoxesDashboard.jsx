@@ -51,7 +51,7 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
   };
 
   const getBoxSourceName = (box) =>
-    box?.displayName || box?.roomName || box?.applianceId || "Audio Box";
+    box?.sourceName || box?.roomName || box?.displayName || box?.applianceId || "Audio Box";
 
   const getVenueName = () => user?.displayName || "SyncLink Venue";
 
@@ -127,7 +127,9 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
         if (!next[box.applianceId]) {
           next[box.applianceId] = {
             displayName: box.displayName || "",
+            sourceName: box.sourceName || box.roomName || "",
             roomName: box.roomName || "",
+            nowPlaying: box.nowPlaying || "",
             roomCode: box.roomCode || "",
             isPublic: box.isPublic !== false
           };
@@ -286,6 +288,7 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
       boxId: box.applianceId,
       boxName: getBoxSourceName(box),
       venueName: getVenueName(),
+      nowPlaying: box.nowPlaying || "",
       roomCode: box.roomCode,
       joinUrl: getJoinUrl(box)
     };
@@ -325,7 +328,10 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
         </span>
       </div>
 
-      <span className="room-list-name">{box.roomName || "Audio Room"}</span>
+      <span className="room-list-name">{getBoxSourceName(box)}</span>
+      {box.nowPlaying && (
+        <span className="room-list-now-playing">{box.nowPlaying}</span>
+      )}
       <div className="smart-box-code">{box.roomCode || "----"}</div>
 
       <div className="smart-box-stats">
@@ -529,10 +535,22 @@ function MyAudioBoxesDashboard({ isSocketConnected, onBack }) {
                 />
                 <input
                   className="room-input"
-                  placeholder="Room name"
-                  value={edits[selectedBox.applianceId]?.roomName || ""}
+                  placeholder="Source name"
+                  value={
+                    edits[selectedBox.applianceId]?.sourceName ||
+                    edits[selectedBox.applianceId]?.roomName ||
+                    ""
+                  }
                   onChange={(event) =>
-                    updateEdit(selectedBox.applianceId, "roomName", event.target.value)
+                    updateEdit(selectedBox.applianceId, "sourceName", event.target.value)
+                  }
+                />
+                <input
+                  className="room-input"
+                  placeholder="Now playing (optional)"
+                  value={edits[selectedBox.applianceId]?.nowPlaying || ""}
+                  onChange={(event) =>
+                    updateEdit(selectedBox.applianceId, "nowPlaying", event.target.value)
                   }
                 />
                 <input

@@ -757,6 +757,13 @@ select:disabled {
   font-size: 0.95rem;
 }
 
+.now-playing-label {
+  color: #d7deea;
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0.15rem 0 0;
+}
+
 .roomy-note {
   margin-top: 1.5rem;
 }
@@ -894,6 +901,13 @@ select:disabled {
   margin-top: 0.15rem;
 }
 
+.room-list-now-playing {
+  display: block;
+  color: #d7deea;
+  font-size: 0.84rem;
+  margin-top: 0.2rem;
+}
+
 .scanner-overlay {
   position: fixed;
   inset: 0;
@@ -986,6 +1000,12 @@ audio {
 .print-venue-name {
   color: #374151;
   font-size: 14pt;
+}
+
+.print-now-playing {
+  color: #374151;
+  font-size: 13pt;
+  font-weight: 600;
 }
 
 .print-page-qr-box {

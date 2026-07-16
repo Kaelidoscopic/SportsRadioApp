@@ -371,24 +371,33 @@ function LandingPage({
 
           {activeRooms.length > 0 ? (
             <div className="room-directory">
-              {activeRooms.map((room) => (
-                <button
-                  key={room.roomId}
-                  className="room-list-card"
-                  onClick={() => joinRoom(room.roomId)}
-                >
-                  <span>
-                    <span className="room-list-code">{room.roomId}</span>
-                    {room.roomName && room.roomName !== room.roomId && (
-                      <span className="room-list-name">{room.roomName}</span>
-                    )}
-                  </span>
+              {activeRooms.map((room) => {
+                const sourceName = room.sourceName || room.roomName;
 
-                  <span className={`mini-pill ${room.isBroadcasting ? "live" : "offline"}`}>
-                    {room.isBroadcasting ? "LIVE" : "OFFLINE"}
-                  </span>
-                </button>
-              ))}
+                return (
+                  <button
+                    key={room.roomId}
+                    className="room-list-card"
+                    onClick={() => joinRoom(room.roomId)}
+                  >
+                    <span>
+                      <span className="room-list-code">{room.roomId}</span>
+                      {sourceName && sourceName !== room.roomId && (
+                        <span className="room-list-name">{sourceName}</span>
+                      )}
+                      {room.nowPlaying && (
+                        <span className="room-list-now-playing">
+                          {room.nowPlaying}
+                        </span>
+                      )}
+                    </span>
+
+                    <span className={`mini-pill ${room.isBroadcasting ? "live" : "offline"}`}>
+                      {room.isBroadcasting ? "LIVE" : "OFFLINE"}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           ) : (
             <p className="small-note roomy-note">

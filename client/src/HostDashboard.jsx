@@ -35,7 +35,7 @@ function HostDashboard({
     const printId = `room-${currentRoom}`;
     const payload = {
       boxId: printId,
-      boxName: `Room ${currentRoom}`,
+      boxName: sourceName,
       venueName: "SyncLink Venue",
       roomCode: currentRoom,
       joinUrl: joinLink

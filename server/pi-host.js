@@ -1,82 +1,64 @@
 const { execFile, spawn } = require("child_process");
 require("dotenv").config();
-const fs = require("fs");
 const http = require("http");
 const https = require("https");
 const os = require("os");
 const path = require("path");
 const { io } = require("socket.io-client");
+const packageJson = require("./package.json");
+const {
+  getDefaultConfigPath,
+  loadBoxConfig,
+  normalizeBoxConfig,
+  sanitizeRoomCode,
+  writeBoxConfigAtomic
+} = require("./appliance-config");
 
 const SERVER_URL = process.env.SPORTSYNC_SERVER_URL || "http://localhost:5000";
-const CONFIG_PATH =
-  process.env.SPORTSYNC_CONFIG_PATH ||
-  "/home/kael/sports-sync-pi/appliance-config.json";
-const DEFAULT_CONFIG = {
-  applianceId: process.env.SPORTSYNC_APPLIANCE_ID || "HOUSE_BOX_1",
-  displayName: process.env.SPORTSYNC_APPLIANCE_NAME || "House Box 1",
-  pairingCode: process.env.SPORTSYNC_PAIRING_CODE || "HOUSE-5235",
-  roomCode: (process.env.SPORTSYNC_ROOM_CODE || "HOME").toUpperCase(),
-  roomName: process.env.SPORTSYNC_ROOM_NAME || "Home Audio",
-  audioDevice: process.env.SPORTSYNC_AUDIO_DEVICE || "auto",
-  enabled: process.env.SPORTSYNC_AUDIO_ENABLED !== "false",
-  roomActive: process.env.SPORTSYNC_ROOM_ACTIVE !== "false",
-  isPublic: process.env.SPORTSYNC_ROOM_PUBLIC !== "false"
-};
+const CONFIG_PATH = getDefaultConfigPath();
 let audioDevice = null;
 const SAMPLE_RATE = Number(process.env.SPORTSYNC_SAMPLE_RATE || 44100);
 const CHANNELS = Number(process.env.SPORTSYNC_CHANNELS || 2);
 const CHUNK_BYTES = Number(process.env.SPORTSYNC_CHUNK_BYTES || 8192);
 const PI_HOST_TOKEN = process.env.PI_HOST_TOKEN || "";
-const RETRY_DELAY_MS = Number(process.env.SPORTSYNC_RETRY_DELAY_MS || 2000);
+const HTTP_TIMEOUT_MS = Number(process.env.SPORTSYNC_HTTP_TIMEOUT_MS || 10000);
+const RETRY_BASE_DELAY_MS = Number(
+  process.env.SPORTSYNC_RETRY_BASE_DELAY_MS ||
+    process.env.SPORTSYNC_RETRY_DELAY_MS ||
+    1000
+);
+const RETRY_MAX_DELAY_MS = Number(
+  process.env.SPORTSYNC_RETRY_MAX_DELAY_MS || 30000
+);
 const ROOM_404_EXIT_AFTER_MS = Number(
   process.env.SPORTSYNC_ROOM_404_EXIT_AFTER_MS || 10000
 );
+const {
+  config: loadedConfig,
+  created: configCreated,
+  migratedFrom: configMigratedFrom
+} = loadBoxConfig({
+  configPath: CONFIG_PATH,
+  legacyPaths: [
+    path.resolve(process.cwd(), "appliance-config.json"),
+    path.resolve(process.cwd(), "..", "appliance-config.json")
+  ].filter((candidate) => candidate !== CONFIG_PATH)
+});
+let applianceConfigState = loadedConfig;
 
-const sanitizeRoomCode = (code) =>
-  String(code || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-
-const readApplianceConfig = () => {
-  try {
-    if (!fs.existsSync(CONFIG_PATH)) return { ...DEFAULT_CONFIG };
-
-    return {
-      ...DEFAULT_CONFIG,
-      ...JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"))
-    };
-  } catch (error) {
-    console.error(`Failed to read appliance config: ${error.message}`);
-    return { ...DEFAULT_CONFIG };
-  }
-};
-
-const writeApplianceConfig = () => {
-  try {
-    fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true });
-    fs.writeFileSync(
-      CONFIG_PATH,
-      `${JSON.stringify(applianceConfigState, null, 2)}\n`
-    );
-  } catch (error) {
-    console.error(`Failed to write appliance config: ${error.message}`);
-  }
-};
-
-let applianceConfigState = readApplianceConfig();
-applianceConfigState.roomCode = sanitizeRoomCode(applianceConfigState.roomCode);
-if (!fs.existsSync(CONFIG_PATH)) {
-  writeApplianceConfig();
-}
-
-let applianceId = applianceConfigState.applianceId;
-let displayName = applianceConfigState.displayName || applianceId;
-let pairingCode = applianceConfigState.pairingCode || String(applianceId).toUpperCase();
+let applianceId = applianceConfigState.deviceId;
+let displayName = applianceConfigState.deviceName;
+let pairingCode = applianceConfigState.pairingCode;
 let roomCode = applianceConfigState.roomCode || "HOME";
 let roomName = applianceConfigState.roomName || roomCode;
+let nowPlaying = applianceConfigState.nowPlaying || "";
 let audioDeviceSetting = applianceConfigState.audioDevice || "auto";
-let audioEnabled = applianceConfigState.enabled !== false;
-let roomActive = applianceConfigState.roomActive !== false;
+let audioEnabled = applianceConfigState.audioEnabled !== false;
+let roomActive = applianceConfigState.active !== false;
 let isPublic = applianceConfigState.isPublic !== false;
 let commandSocket = null;
+let socketHasConnected = false;
+let socketReconnectAttempt = 0;
 const startedAt = Date.now();
 
 const applianceRoomPath = (action) =>
@@ -120,6 +102,9 @@ const request = (path, body, contentType) =>
     );
 
     req.on("error", reject);
+    req.setTimeout(HTTP_TIMEOUT_MS, () => {
+      req.destroy(new Error(`Request timed out after ${HTTP_TIMEOUT_MS}ms.`));
+    });
     req.write(payload);
     req.end();
   });
@@ -128,15 +113,20 @@ const postJson = (path, data) =>
   request(path, JSON.stringify(data), "application/json");
 
 const getStatusPayload = () => ({
+  deviceId: applianceId,
+  deviceName: displayName,
   applianceId,
   name: displayName,
   displayName,
   pairingCode,
   roomCode,
   roomName,
+  sourceName: roomName,
+  nowPlaying,
   online: true,
   isRoomActive: roomActive,
   isAudioEnabled: audioEnabled,
+  active: roomActive,
   roomActive,
   audioEnabled,
   isPublic,
@@ -146,7 +136,10 @@ const getStatusPayload = () => ({
   sampleRate: SAMPLE_RATE,
   channels: CHANNELS,
   encoding: "pcm_s16le",
-  label: os.hostname() || "Raspberry Pi appliance"
+  label: os.hostname() || "Raspberry Pi appliance",
+  softwareVersion: packageJson.version,
+  hostType: "box",
+  boxHostType: "raspberry-pi"
 });
 
 let shuttingDown = false;
@@ -157,6 +150,7 @@ let audioUploading = false;
 let registeringRoom = false;
 let heartbeatTimer = null;
 let retryTimer = null;
+let retryAttempt = 0;
 let roomMissingSince = null;
 let audioDetectionTimer = null;
 
@@ -167,9 +161,7 @@ const setBackendOnline = (online) => {
   console.log(
     online
       ? "Backend reachable. Re-registering appliance room."
-      : `Backend down. Dropping audio chunks and retrying every ${Math.round(
-          RETRY_DELAY_MS / 1000
-        )}s.`
+      : "Backend unavailable. Audio uploads are paused while recovery continues."
   );
 };
 
@@ -227,10 +219,15 @@ const markRoomLost = (reason) => {
 const startRoom = async () => {
   await postJson(applianceRoomPath("start"), getStatusPayload());
   roomRegistered = true;
+  retryAttempt = 0;
+  if (retryTimer) {
+    clearTimeout(retryTimer);
+    retryTimer = null;
+  }
   clearRoomMissingWatchdog();
   setBackendOnline(true);
   emitStatus();
-  console.log(`Room re-registered. ${roomCode} is online at ${SERVER_URL}.`);
+  console.log(`Room activated: ${roomCode} is online at ${SERVER_URL}.`);
 };
 
 const ensureRoomRegistered = async () => {
@@ -244,7 +241,7 @@ const ensureRoomRegistered = async () => {
 
   try {
     await startRoom();
-    setAudioUploading(true);
+    setAudioUploading(Boolean(audioEnabled && arecord));
     return true;
   } catch (error) {
     roomRegistered = false;
@@ -266,7 +263,21 @@ const ensureRoomRegistered = async () => {
 const scheduleRetry = () => {
   if (retryTimer || shuttingDown) return;
 
-  console.log(`Retrying room registration in ${RETRY_DELAY_MS / 1000}s.`);
+  const exponentialDelay = Math.min(
+    RETRY_MAX_DELAY_MS,
+    RETRY_BASE_DELAY_MS * 2 ** retryAttempt
+  );
+  const delay = Math.min(
+    RETRY_MAX_DELAY_MS,
+    Math.max(
+      RETRY_BASE_DELAY_MS,
+      Math.round(exponentialDelay * (0.8 + Math.random() * 0.4))
+    )
+  );
+  retryAttempt += 1;
+  console.log(
+    `Reconnection scheduled in ${delay}ms (room registration attempt ${retryAttempt}).`
+  );
 
   retryTimer = setTimeout(async () => {
     retryTimer = null;
@@ -274,7 +285,7 @@ const scheduleRetry = () => {
     if (!(await ensureRoomRegistered())) {
       scheduleRetry();
     }
-  }, RETRY_DELAY_MS);
+  }, delay);
 };
 
 const handleRecoverableError = async (label, error) => {
@@ -302,11 +313,6 @@ const handleRecoverableError = async (label, error) => {
 
 const sendHeartbeat = async () => {
   if (!roomActive) {
-    emitStatus();
-    return;
-  }
-
-  if (!audioEnabled) {
     emitStatus();
     return;
   }
@@ -438,6 +444,7 @@ const startCapture = () => {
         "--buffer-size",
         String(CHUNK_BYTES)
       ]);
+      console.log(`Audio capture started on ${device}.`);
 
       arecord.stdout.on("data", async (chunk) => {
         arecord.stdout.pause();
@@ -474,7 +481,7 @@ const startCapture = () => {
         if (!shuttingDown) {
           console.error(`arecord exited with code ${code} signal ${signal}.`);
           console.error("Restarting audio capture in 3s.");
-          setTimeout(startCapture, 3000);
+          scheduleCaptureStart();
         }
       });
     })
@@ -485,14 +492,18 @@ const startCapture = () => {
 };
 
 const stopRoom = async () => {
+  if (shuttingDown) return;
   shuttingDown = true;
+  console.log("Application shutting down.");
 
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
   }
 
   if (retryTimer) {
     clearTimeout(retryTimer);
+    retryTimer = null;
   }
 
   stopCapture();
@@ -503,36 +514,46 @@ const stopRoom = async () => {
     console.error("Stop request failed:", error.message);
   }
 
-  commandSocket?.disconnect();
+  if (commandSocket) {
+    commandSocket.removeAllListeners();
+    commandSocket.disconnect();
+    commandSocket = null;
+  }
 };
 
 const applyConfig = (updates = {}) => {
-  applianceConfigState = {
-    ...applianceConfigState,
-    ...updates
+  const canonicalUpdates = {
+    ...updates,
+    ...(updates.applianceId ? { deviceId: updates.applianceId } : {}),
+    ...(updates.displayName ? { deviceName: updates.displayName } : {}),
+    ...(typeof updates.roomActive === "boolean"
+      ? { active: updates.roomActive }
+      : {}),
+    ...(typeof updates.enabled === "boolean"
+      ? { audioEnabled: updates.enabled }
+      : {})
   };
-  applianceConfigState.roomCode = sanitizeRoomCode(applianceConfigState.roomCode);
-  applianceConfigState.displayName =
-    applianceConfigState.displayName || applianceConfigState.applianceId;
-  applianceConfigState.pairingCode =
-    applianceConfigState.pairingCode || String(applianceConfigState.applianceId).toUpperCase();
-  applianceConfigState.roomName =
-    applianceConfigState.roomName || applianceConfigState.roomCode;
-  applianceConfigState.audioDevice = applianceConfigState.audioDevice || "auto";
-  applianceConfigState.enabled = applianceConfigState.enabled !== false;
-  applianceConfigState.roomActive = applianceConfigState.roomActive !== false;
-  applianceConfigState.isPublic = applianceConfigState.isPublic !== false;
+  delete canonicalUpdates.applianceId;
+  delete canonicalUpdates.displayName;
+  delete canonicalUpdates.roomActive;
+  delete canonicalUpdates.enabled;
 
-  applianceId = applianceConfigState.applianceId || applianceId;
-  displayName = applianceConfigState.displayName || applianceId;
-  pairingCode = applianceConfigState.pairingCode || String(applianceId).toUpperCase();
+  applianceConfigState = normalizeBoxConfig({
+    ...applianceConfigState,
+    ...canonicalUpdates
+  });
+
+  applianceId = applianceConfigState.deviceId;
+  displayName = applianceConfigState.deviceName;
+  pairingCode = applianceConfigState.pairingCode;
   roomCode = applianceConfigState.roomCode || roomCode;
   roomName = applianceConfigState.roomName || roomCode;
+  nowPlaying = applianceConfigState.nowPlaying || "";
   audioDeviceSetting = applianceConfigState.audioDevice;
-  audioEnabled = applianceConfigState.enabled;
-  roomActive = applianceConfigState.roomActive;
+  audioEnabled = applianceConfigState.audioEnabled;
+  roomActive = applianceConfigState.active;
   isPublic = applianceConfigState.isPublic;
-  writeApplianceConfig();
+  writeBoxConfigAtomic(CONFIG_PATH, applianceConfigState);
 };
 
 const changeRoomCode = async (nextRoomCode) => {
@@ -580,6 +601,14 @@ const applySettingsCommand = async ({ settings = {} } = {}) => {
     updates.roomName = settings.roomName.trim();
   }
 
+  if (typeof settings.sourceName === "string" && settings.sourceName.trim()) {
+    updates.roomName = settings.sourceName.trim();
+  }
+
+  if (typeof settings.nowPlaying === "string") {
+    updates.nowPlaying = settings.nowPlaying.trim();
+  }
+
   if (typeof settings.roomCode === "string" && sanitizeRoomCode(settings.roomCode)) {
     updates.roomCode = sanitizeRoomCode(settings.roomCode);
   }
@@ -614,15 +643,24 @@ const applySettingsCommand = async ({ settings = {} } = {}) => {
   emitStatus();
 };
 
-const activateRoomCommand = async ({ roomCode: nextRoomCode, roomName: nextRoomName } = {}) => {
+const activateRoomCommand = async ({
+  roomCode: nextRoomCode,
+  roomName: nextRoomName,
+  sourceName: nextSourceName,
+  nowPlaying: nextNowPlaying
+} = {}) => {
   const updates = { roomActive: true };
 
   if (nextRoomCode) {
     updates.roomCode = sanitizeRoomCode(nextRoomCode);
   }
 
-  if (nextRoomName) {
-    updates.roomName = String(nextRoomName).trim();
+  if (nextSourceName || nextRoomName) {
+    updates.roomName = String(nextSourceName || nextRoomName).trim();
+  }
+
+  if (typeof nextNowPlaying === "string") {
+    updates.nowPlaying = nextNowPlaying.trim();
   }
 
   applyConfig(updates);
@@ -677,17 +715,58 @@ const applianceAutoRestart = () => {
 };
 
 const connectCommandSocket = () => {
+  if (commandSocket) return commandSocket;
+
   commandSocket = io(SERVER_URL, {
     transports: ["websocket", "polling"],
     auth: PI_HOST_TOKEN ? { token: PI_HOST_TOKEN } : undefined,
     reconnection: true,
     reconnectionAttempts: Infinity,
-    reconnectionDelay: 1000,
-    reconnectionDelayMax: 5000
+    reconnectionDelay: RETRY_BASE_DELAY_MS,
+    reconnectionDelayMax: RETRY_MAX_DELAY_MS,
+    randomizationFactor: 0.2,
+    timeout: HTTP_TIMEOUT_MS
   });
 
-  commandSocket.on("connect", () => {
+  commandSocket.on("connect", async () => {
+    const reconnected = socketHasConnected;
+    socketHasConnected = true;
+    socketReconnectAttempt = 0;
+    console.log(
+      reconnected
+        ? "Backend command socket reconnected successfully."
+        : "Backend command socket connected."
+    );
     commandSocket.emit("appliance:register", getStatusPayload());
+
+    if (reconnected && roomActive && !(await ensureRoomRegistered())) {
+      scheduleRetry();
+    }
+  });
+
+  commandSocket.on("appliance:registered", () => {
+    console.log("Box registered with backend.");
+  });
+
+  commandSocket.on("disconnect", (reason) => {
+    if (shuttingDown) return;
+    console.log(`Backend command socket disconnected (${reason}).`);
+    roomRegistered = false;
+    setAudioUploading(false);
+    scheduleRetry();
+  });
+
+  commandSocket.io.on("reconnect_attempt", (attempt) => {
+    socketReconnectAttempt = attempt;
+    if (attempt === 1 || attempt % 5 === 0) {
+      console.log(`Backend connection attempt ${attempt}.`);
+    }
+  });
+
+  commandSocket.on("connect_error", (error) => {
+    if (socketReconnectAttempt <= 1 || socketReconnectAttempt % 5 === 0) {
+      console.error(`Backend command connection failed: ${error.message}`);
+    }
   });
 
   const handleSetRoomCode = async ({ roomCode: nextRoomCode } = {}) => {
@@ -721,9 +800,19 @@ const connectCommandSocket = () => {
     console.log("Restart command received.");
     process.exit(1);
   });
+
+  return commandSocket;
 };
 
 const main = async () => {
+  console.log(`Box application started (version ${packageJson.version}).`);
+  console.log(
+    `Configuration ${configCreated ? "created" : "loaded"}: ${CONFIG_PATH}`
+  );
+  if (configMigratedFrom) {
+    console.log(`Legacy configuration migrated from ${configMigratedFrom}.`);
+  }
+  console.log(`Device identity: ${applianceId}`);
   console.log(`Pi host server URL: ${SERVER_URL}`);
   console.log(`Pi host appliance ID: ${applianceId}`);
   console.log(`Pi host pairing code: ${pairingCode}`);
@@ -744,22 +833,20 @@ const main = async () => {
     console.log("Audio capture is disabled by appliance config.");
   }
 
-  if (roomActive && audioEnabled && !(await ensureRoomRegistered())) {
+  if (roomActive && !(await ensureRoomRegistered())) {
     scheduleRetry();
   }
 
   heartbeatTimer = setInterval(sendHeartbeat, 3000);
 };
 
-process.on("SIGINT", async () => {
+const handleShutdownSignal = async () => {
   await stopRoom();
   process.exit(0);
-});
+};
 
-process.on("SIGTERM", async () => {
-  await stopRoom();
-  process.exit(0);
-});
+process.once("SIGINT", handleShutdownSignal);
+process.once("SIGTERM", handleShutdownSignal);
 
 main().catch((error) => {
   console.error(error.message);

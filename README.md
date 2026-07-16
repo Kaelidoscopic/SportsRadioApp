@@ -24,6 +24,7 @@ Key appliance docs:
 - [Hardware list](docs/hardware-list.md)
 - [Wiring diagram](docs/wiring-diagram.md)
 - [Pi production setup](docs/pi-production-setup.md)
+- [Pi appliance setup and recovery](docs/raspberry-pi-appliance-setup.md)
 - [Appliance admin control](docs/appliance-admin-control.md)
 - [Product appliance dashboard plan](docs/product-appliance-dashboard-plan.md)
 - [Pi update workflow](docs/pi-update-workflow.md)

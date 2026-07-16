@@ -1,0 +1,12 @@
+{
+  "deviceId": "replace-with-the-generated-device-id",
+  "deviceName": "Venue Audio Box",
+  "pairingCode": "BOX-EXAMPLE",
+  "roomName": "Main TV",
+  "roomCode": "MAIN",
+  "active": true,
+  "audioEnabled": true,
+  "audioDevice": "auto",
+  "isPublic": true,
+  "nowPlaying": ""
+}

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-set -e
+set -Eeuo pipefail
 
-APP_DIR="/home/kael/sports-sync-pi"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_DIR="${SPORTSYNC_APP_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 SERVER_DIR="$APP_DIR/server"
-SERVICE_NAME="sports-sync-pi"
+SERVICE_NAME="${SPORTSYNC_SERVICE_NAME:-venue-audio-box}"
 
 echo "Updating Sports Sync Pi appliance..."
 echo "Repo: $APP_DIR"
@@ -17,7 +18,7 @@ if [ ! -d ".git" ]; then
 fi
 
 echo "Pulling latest changes from GitHub..."
-git pull origin main
+git pull --ff-only origin "${SPORTSYNC_GIT_BRANCH:-main}"
 
 if [ ! -d "$SERVER_DIR" ]; then
   echo "ERROR: Server directory not found at $SERVER_DIR."
@@ -26,7 +27,7 @@ fi
 
 echo "Installing server dependencies..."
 cd "$SERVER_DIR"
-npm install
+npm ci --omit=dev
 
 echo "Restarting $SERVICE_NAME..."
 sudo systemctl restart "$SERVICE_NAME"

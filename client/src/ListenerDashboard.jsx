@@ -4,6 +4,7 @@ function ListenerDashboard({
   isHostLive,
   hostType = "browser",
   sourceName,
+  nowPlaying,
   leaveRoom,
   startListening,
   resumeApplianceAudio,
@@ -33,6 +34,7 @@ function ListenerDashboard({
       <div className="main-card dashboard-card listener-card simple-listener-card">
         <div className="brand-block centered-brand">
           <h1 className="app-title">{roomLabel}</h1>
+          {nowPlaying && <p className="now-playing-label">{nowPlaying}</p>}
           <p className="app-subtitle">
             {isConnected ? "You're connected" : "Waiting for audio"}
           </p>

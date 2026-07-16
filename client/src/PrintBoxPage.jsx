@@ -73,8 +73,9 @@ function PrintBoxPage() {
         const user = readSavedUser();
         setPayload({
           boxId: box.applianceId,
-          boxName: box.displayName || box.roomName || box.applianceId,
+          boxName: box.sourceName || box.roomName || box.displayName || box.applianceId,
           venueName: user?.displayName || "SyncLink Venue",
+          nowPlaying: box.nowPlaying || "",
           roomCode: box.roomCode || "",
           joinUrl: box.roomCode
             ? `${frontendUrl}/?room=${encodeURIComponent(box.roomCode)}`
@@ -140,6 +141,9 @@ function PrintBoxPage() {
         <h1 className="print-title visible-print-text">Listen to this TV Audio</h1>
         <div className="print-source-name visible-print-text">{payload.boxName}</div>
         <div className="print-venue-name visible-print-text">{payload.venueName}</div>
+        {payload.nowPlaying && (
+          <div className="print-now-playing visible-print-text">{payload.nowPlaying}</div>
+        )}
 
         <div className="print-page-qr-box">
           <QRCodeSVG value={payload.joinUrl} size={320} />
