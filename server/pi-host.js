@@ -495,8 +495,18 @@ const startCapture = () => {
         scheduleRetry,
         setAudioUploading
       });
-      captureDataHandler = dataHandler;
-      stdout.on("data", dataHandler);
+      let receivedChunkCount = 0;
+      const debugDataHandler = (chunk) => {
+        receivedChunkCount += 1;
+        if (receivedChunkCount % 100 === 0) {
+          console.log(
+            `arecord audio chunks received: count=${receivedChunkCount} size=${chunk.length} bytes.`
+          );
+        }
+        return dataHandler(chunk);
+      };
+      captureDataHandler = debugDataHandler;
+      stdout.on("data", debugDataHandler);
 
       captureProcess.stderr.on("data", (chunk) => {
         const text = chunk.toString("utf8").trim();
@@ -507,14 +517,14 @@ const startCapture = () => {
       });
 
       captureProcess.on("exit", (code, signal) => {
-        stdout.removeListener("data", dataHandler);
+        stdout.removeListener("data", debugDataHandler);
         if (arecord === captureProcess) {
           arecord = null;
         }
         if (captureStream === stdout) {
           captureStream = null;
         }
-        if (captureDataHandler === dataHandler) {
+        if (captureDataHandler === debugDataHandler) {
           captureDataHandler = null;
         }
 
