@@ -27,7 +27,8 @@ const io = new Server(server, {
   }
 });
 
-const rooms = {};
+const { createDesktopRooms, maySignal, hasMembership } = require("./desktop-rooms");
+const rooms = Object.create(null);
 const APPLIANCE_HOST_PREFIX = "appliance:";
 const APPLIANCE_OFFLINE_AFTER_MS = 10000;
 const appliances = {};
@@ -440,7 +441,7 @@ const getPublicRooms = () =>
     .filter(([, room]) => room.hostSocketId && room.appliance?.isPublic !== false)
     .map(([roomId, room]) => ({
       roomId,
-      roomName: room.appliance?.roomName || roomId,
+      roomName: room.roomName || room.appliance?.roomName || roomId,
       sourceName: room.appliance?.sourceName || room.appliance?.roomName || roomId,
       nowPlaying: room.appliance?.nowPlaying || "",
       isBroadcasting: room.isBroadcasting,
@@ -542,6 +543,7 @@ const closeRoom = (roomId, reason) => {
   }
 
   io.to(roomId).emit("room-closed", reason);
+  io.in(roomId).socketsLeave(roomId);
   delete rooms[roomId];
 
   emitRoomsList();
@@ -621,8 +623,8 @@ const updateApplianceRoom = (roomId, appliance = {}) => {
 
   if (existingRoom) {
     if (
-      existingRoom.hostSocketId &&
-      existingRoom.hostType !== "appliance"
+      existingRoom.hostType === "desktop" || (existingRoom.hostSocketId &&
+      existingRoom.hostType !== "appliance")
     ) {
       return {
         error: "Room already exists with a browser host."
@@ -749,10 +751,19 @@ setInterval(() => {
   }
 }, 5000);
 
+const desktopRooms = createDesktopRooms({
+  rooms, io, createRoomState, closeRoom, emitRoomsList,
+  graceMs: process.env.SPORTSYNC_DESKTOP_GRACE_MS,
+  credentialTtlMs: process.env.SPORTSYNC_DESKTOP_CREDENTIAL_TTL_MS
+});
+
 io.on("connection", (socket) => {
+  desktopRooms.attach(socket);
   console.log(`User connected: ${socket.id}`);
 
   socket.on("create-room", (customCode) => {
+    if (hasMembership(rooms, socket.id)) return socket.emit("error-message", "Leave your current room first.");
+    if (customCode != null && typeof customCode !== "string") return socket.emit("error-message", "Invalid room code.");
     let roomId = customCode
       ? sanitizeRoomCode(customCode)
       : Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -765,7 +776,7 @@ io.on("connection", (socket) => {
     if (rooms[roomId]) {
       const existingRoom = rooms[roomId];
 
-      if (existingRoom.hostSocketId === null) {
+      if (existingRoom.hostSocketId === null && existingRoom.hostType === "browser") {
         if (existingRoom.hostDisconnectTimer) {
           clearTimeout(existingRoom.hostDisconnectTimer);
           existingRoom.hostDisconnectTimer = null;
@@ -812,6 +823,9 @@ io.on("connection", (socket) => {
   });
 
   socket.on("join-room", (roomCode) => {
+    if (typeof roomCode !== "string") return socket.emit("error-message", "Invalid room code.");
+    const current = findRoomForSocket(socket.id);
+    if (current && (current.role === "host" || current.roomId !== sanitizeRoomCode(roomCode))) return socket.emit("error-message", "Leave your current room first.");
     const roomId = sanitizeRoomCode(roomCode || "");
     const room = rooms[roomId];
 
@@ -961,26 +975,22 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("webrtc-offer", ({ target, offer }) => {
-    io.to(target).emit("webrtc-offer", {
-      sender: socket.id,
-      offer
+  for (const [event, field] of [["webrtc-offer", "offer"], ["webrtc-answer", "answer"], ["webrtc-ice-candidate", "candidate"]]) {
+    socket.on(event, (payload) => {
+      if (!payload || typeof payload !== "object" || !maySignal(rooms, socket.id, payload.target, event)) {
+        socket.emit("error-message", "Unauthorized signaling.");
+        return;
+      }
+      const value = payload[field];
+      if (!value || typeof value !== "object" || Array.isArray(value) ||
+        (field !== "candidate" && (typeof value.sdp !== "string" || value.type !== field)) ||
+        (field === "candidate" && typeof value.candidate !== "string")) {
+        socket.emit("error-message", "Invalid signaling payload.");
+        return;
+      }
+      io.to(payload.target).emit(event, { sender: socket.id, [field]: value });
     });
-  });
-
-  socket.on("webrtc-answer", ({ target, answer }) => {
-    io.to(target).emit("webrtc-answer", {
-      sender: socket.id,
-      answer
-    });
-  });
-
-  socket.on("webrtc-ice-candidate", ({ target, candidate }) => {
-    io.to(target).emit("webrtc-ice-candidate", {
-      sender: socket.id,
-      candidate
-    });
-  });
+  }
 
   socket.on("get-rooms", () => {
     socket.emit("rooms-list", getPublicRooms());
@@ -1009,6 +1019,7 @@ io.on("connection", (socket) => {
       const room = rooms[roomId];
 
       if (room.hostSocketId === socket.id) {
+        if (room.hostType === "desktop") continue;
         room.hostSocketId = null;
         room.isBroadcasting = false;
 
@@ -1047,10 +1058,11 @@ io.on("connection", (socket) => {
   });
 
   socket.on("recover-host-room", (roomCode) => {
+    if (typeof roomCode !== "string" || hasMembership(rooms, socket.id)) return socket.emit("error-message", "Room could not be recovered.");
     const roomId = sanitizeRoomCode(roomCode || "");
     const room = rooms[roomId];
 
-    if (!room) {
+    if (!room || room.hostType !== "browser") {
       socket.emit("error-message", "Room could not be recovered.");
       return;
     }
@@ -1783,5 +1795,5 @@ app.get("/", (req, res) => {
 const PORT = process.env.PORT || 5000;
 
 server.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
+  console.log(`Server listening on port ${server.address().port}`);
 });

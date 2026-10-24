@@ -1,6 +1,18 @@
 # SportsRadioApp
 
-SportsRadioApp is a real-time sports audio sync app. It supports browser-hosted audio rooms and a Raspberry Pi appliance mode for capturing physical TV or venue audio and streaming it to listener phones.
+SportsRadioApp is a software-first audio broadcasting platform. The Windows desktop broadcaster in `desktop/` captures system playback and sends audio through WebRTC to the existing phone listener. Browser hosting and Raspberry Pi appliance support remain available.
+
+## Windows Desktop Broadcaster
+
+See [Windows installation, run commands, diagnostics and acceptance checklist](docs/windows-broadcaster.md). The implementation and local capture/WebRTC transport have been exercised; audible Windows-to-phone playback still requires real-device acceptance testing.
+
+```powershell
+npm --prefix desktop ci
+$env:SPORTSRADIO_BACKEND_URL = 'http://localhost:5000'
+npm --prefix desktop start
+```
+
+Start the backend first. Configure the phone website to use the same backend; a phone cannot connect to the PC through the phone's localhost. The desktop guide includes the complete three-terminal LAN procedure.
 
 ## Appliance Mode Overview
 

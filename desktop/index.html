@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src data:; connect-src 'none'; media-src 'self' blob:; base-uri 'none'; form-action 'none'; frame-src 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SportsRadio Broadcaster</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main>
+    <h1>SportsRadio Broadcaster</h1>
+    <p>Broadcast Windows playback audio to phones. No microphone or audio hardware required.</p>
+    <section aria-label="Backend connection">
+      <label for="backend">Backend URL</label><input id="backend" type="url" spellcheck="false">
+      <button id="connect">Connect</button><span id="connection">Disconnected</span>
+    </section>
+    <section aria-label="Room">
+      <label for="name">Room name</label><input id="name" maxlength="120" value="Windows playback">
+      <label for="code">Room code (leave blank to generate)</label><input id="code" maxlength="32" spellcheck="false" placeholder="DESK">
+      <div class="buttons"><button id="create">Create New Room</button><button id="recover">Recover Saved Room</button><button id="end">End Room</button></div>
+      <p>Room: <strong id="room-name">—</strong> · Code: <strong id="room-code">—</strong> <button id="copy">Copy room code</button></p>
+      <p>Listeners in room: <strong id="listeners">0</strong> · Broadcasting: <strong id="broadcast">Stopped</strong></p>
+      <div class="buttons"><button id="start">Start Broadcasting</button><button id="stop">Stop Broadcasting</button></div>
+    </section>
+    <section aria-label="Phone joining">
+      <label for="listener-url">Phone listener website URL (must use the same backend)</label><input id="listener-url" type="url" spellcheck="false">
+      <button id="qr-button">Update QR code</button>
+      <div id="join"><img id="qr" alt="Scan to join the audio room" hidden><p id="join-url"></p></div>
+    </section>
+    <p id="message" role="status" aria-live="polite">Loading…</p>
+    <p id="peer" role="status"></p>
+    <small id="version"></small>
+  </main>
+  <script type="module" src="renderer.mjs"></script>
+</body>
+</html>

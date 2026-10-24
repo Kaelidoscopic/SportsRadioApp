@@ -1,0 +1,32 @@
+{
+  "name": "sportsradio-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Windows system playback broadcaster for SportsRadioApp",
+  "author": "SportsRadioApp",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.*",
+    "check": "node scripts/check.cjs",
+    "smoke": "electron scripts/smoke.cjs",
+    "build": "npm run check && electron-builder --win --x64 --dir",
+    "dist": "npm run check && electron-builder --win portable --x64"
+  },
+  "dependencies": {
+    "qrcode": "1.5.4",
+    "socket.io-client": "4.8.4"
+  },
+  "devDependencies": {
+    "electron": "45.0.0",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "com.sportsradioapp.broadcaster",
+    "productName": "SportsRadio Broadcaster",
+    "electronDist": "node_modules/electron/dist",
+    "directories": { "output": "release" },
+    "files": ["main.cjs", "preload.cjs", "index.html", "renderer.mjs", "styles.css", "src/**/*", "package.json"],
+    "win": { "target": ["portable"], "signAndEditExecutable": false }
+  }
+}
