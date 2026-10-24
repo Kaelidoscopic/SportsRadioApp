@@ -49,7 +49,7 @@ else {
       return fn(...args);
     });
     handle('app:initial', () => ({ state: rooms.snapshot(), backendUrl: process.env.SPORTSRADIO_BACKEND_URL || 'http://localhost:5000',
-      listenerUrl: process.env.SPORTSRADIO_LISTENER_URL || 'https://sports-radio-app.vercel.app', platform: process.platform, electron: process.versions.electron }));
+      listenerUrl: process.env.SPORTSRADIO_LISTENER_URL || 'https://sports-radio-app.vercel.app', platform: process.platform, electron: process.versions.electron, appVersion: app.getVersion() }));
     handle('room:connect', (url) => rooms.connect(url));
     handle('room:register', (input) => rooms.register(input));
     handle('room:recover', () => rooms.recover());

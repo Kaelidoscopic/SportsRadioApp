@@ -7,6 +7,8 @@ function ListenerDashboard({
   nowPlaying,
   leaveRoom,
   startListening,
+  reconnectAudio,
+  diagnostics = {},
   resumeApplianceAudio,
   needsUserAudioGesture = false,
   remoteAudioRef,
@@ -17,8 +19,10 @@ function ListenerDashboard({
     sourceName ||
     (hostType === "appliance" ? `TV Audio - ${currentRoom}` : `Room ${currentRoom}`);
   const isConnected = isSocketConnected && isHostLive;
-  const statusText = isConnected ? "LIVE" : isSocketConnected ? "Connected" : "Disconnected";
-  const shouldShowStartButton = !isListening || needsUserAudioGesture;
+  const mediaConnected = hostType === "appliance" ? isListening : diagnostics.connection === "connected";
+  const receiving = hostType === "appliance" || diagnostics.bytes > 0;
+  const statusText = isListening && mediaConnected && receiving && !diagnostics.paused ? "Playing" : isConnected ? "Host live · Waiting for audio" : isSocketConnected ? "Connected to room" : "Disconnected";
+  const shouldShowStartButton = !isListening || needsUserAudioGesture || diagnostics.paused === true;
 
   const handleStart = () => {
     if (needsUserAudioGesture && hostType === "appliance") {
@@ -63,9 +67,21 @@ function ListenerDashboard({
           <button className="ghost-button" onClick={leaveRoom}>
             Leave Audio
           </button>
+          {hostType !== "appliance" && (
+            <button className="ghost-button" onClick={reconnectAudio} disabled={!isSocketConnected || !isHostLive}>
+              Retry audio connection
+            </button>
+          )}
         </div>
 
-        <audio ref={remoteAudioRef} autoPlay />
+        {hostType !== "appliance" && (
+          <details>
+            <summary>Audio diagnostics</summary>
+            <pre style={{ whiteSpace: "pre-wrap", textAlign: "left" }}>{JSON.stringify(diagnostics, null, 2)}</pre>
+          </details>
+        )}
+
+        <audio ref={remoteAudioRef} autoPlay playsInline />
       </div>
     </div>
   );

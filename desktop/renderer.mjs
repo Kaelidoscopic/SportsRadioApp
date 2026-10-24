@@ -7,6 +7,13 @@ const $ = (id) => document.getElementById(id);
 const report = (message) => { $('message').textContent = message; };
 const transport = new WebRTCTransport({ signal: (payload) => bridge.signal(payload), report: (message) => { $('peer').textContent = message; } });
 const capture = new WindowsLoopbackCapture({ bridge });
+const diagnosticTimer = setInterval(async () => {
+  await transport.sample();
+  $('diagnostics').textContent = JSON.stringify({
+    capture: capture.raw ? capture.raw.getAudioTracks().map((track) => ({ source: 'Windows loopback', state: track.readyState, enabled: track.enabled, muted: track.muted })) : 'stopped',
+    peers: transport.snapshot()
+  }, null, 2);
+}, 2000);
 const controller = new BroadcastController({ capture, transport, bridge, report });
 let state = { members: [] }, busy = false, lastQrCode;
 function controls() {
@@ -51,9 +58,9 @@ action('start', () => controller.start());
 $('stop').addEventListener('click', () => { controller.stop(); controls(); });
 action('copy', () => bridge.copyCode());
 action('qr-button', qr);
-window.addEventListener('beforeunload', () => controller.stop());
+window.addEventListener('beforeunload', () => { clearInterval(diagnosticTimer); controller.stop(); });
 const initial = await bridge.initial();
 $('backend').value = initial.backendUrl; $('listener-url').value = initial.listenerUrl;
-$('version').textContent = `Windows system loopback · Electron ${initial.electron} · Audio only`;
+$('version').textContent = `Broadcaster ${initial.appVersion} · Electron ${initial.electron} · Windows loopback · Audio only`;
 update(initial.state);
 try { await bridge.connect(initial.backendUrl); } catch (error) { report(error.message); }

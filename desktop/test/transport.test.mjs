@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { WebRTCTransport } from '../src/webrtc-transport.mjs';
+import { audioCounters } from '../src/peer-diagnostics.mjs';
 
 function fixture() {
   const peers = [], sent = [];
@@ -46,4 +47,25 @@ test('failed peers are removed and stream request can create a replacement', asy
   const { transport, peers } = fixture(); await transport.offer('a');
   peers[0].connectionState = 'failed'; peers[0].onconnectionstatechange();
   assert.equal(peers[0].closed, true); await transport.offer('a', true); assert.equal(peers.length, 2);
+});
+
+test('missing answer releases stuck peer and honors a queued stream retry', async () => {
+  const { transport, peers } = fixture(); const deadlines = [];
+  transport.schedule = (fn) => { deadlines.push(fn); return fn; }; transport.cancel = () => {};
+  await transport.offer('a'); await transport.offer('a', true);
+  assert.equal(peers.length, 1); deadlines[0](); await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(peers[0].closed, true); assert.equal(peers.length, 2); transport.close();
+});
+
+test('outbound diagnostics report source energy and RTP counters without raw network data', () => {
+  const stats = new Map([
+    ['rtp', { type: 'outbound-rtp', kind: 'audio', bytesSent: 50, packetsSent: 5, sdp: 'private-sdp' }],
+    ['source', { type: 'media-source', kind: 'audio', audioLevel: 0.1, totalAudioEnergy: 0.2, totalSamplesDuration: 3, deviceId: 'private-device' }],
+    ['transport', { type: 'transport', selectedCandidatePairId: 'pair' }],
+    ['pair', { localCandidateId: 'local', remoteCandidateId: 'remote' }],
+    ['local', { candidateType: 'host', address: 'private-address' }], ['remote', { candidateType: 'relay', candidate: 'private-candidate' }]
+  ]);
+  const result = audioCounters(stats); assert.equal(result.bytesSent, 50); assert.equal(result.sourceEnergy, 0.2);
+  assert.equal(result.remoteCandidateType, 'relay');
+  assert.equal(JSON.stringify(result).includes('private-'), false);
 });

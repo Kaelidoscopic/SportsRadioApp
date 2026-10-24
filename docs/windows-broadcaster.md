@@ -1,5 +1,7 @@
 # Windows desktop broadcaster — Stage 2
 
+For the 0.1.1 negotiation fixes, safe diagnostics, before/after test evidence and exact real-phone retest procedure, see [Silent-audio diagnosis](windows-silent-audio-diagnosis.md). The results below describe the original Stage 2 baseline.
+
 The Electron application is implemented in `desktop/`. It registers with the Stage 1 backend, captures Windows system playback using native loopback, and sends audio tracks over the existing WebRTC protocol. No microphone, Pi, sound card, cable, or browser-tab picker is used. The existing React listener and Pi PCM code are unchanged.
 
 **Validation boundary:** on Windows 10.0.26200 with Electron 45.0.0, encrypted credential save/reload passed, native capture started with deviceId `loopback`, and a local WebRTC receiver received one audio track and zero video tracks. A separate Windows PowerShell/SoundPlayer process played a quiet 440 Hz tone; the receiver measured peak RMS **0.02853**, confirming nonzero playback audio crossed the capture/WebRTC pipeline. Stop completed. No real phone has been tested, and no human listening verification is claimed. The app's Live status, RTP bytes, or successful packaging alone do not establish audible end-to-end playback.

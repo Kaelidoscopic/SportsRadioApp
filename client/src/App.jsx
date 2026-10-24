@@ -5,6 +5,7 @@ import HostDashboard from "./HostDashboard";
 import ListenerDashboard from "./ListenerDashboard";
 import ApplianceAdminPage from "./ApplianceAdminPage";
 import PrintBoxPage from "./PrintBoxPage";
+import { ListenerWebRTC, playListenerAudio, errorName } from "./listener-webrtc.js";
 
 const getSocketUrl = () => {
   if (import.meta.env.VITE_BACKEND_URL) {
@@ -83,6 +84,7 @@ function App() {
   const [isHostLive, setIsHostLive] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [listenerDiagnostics, setListenerDiagnostics] = useState({});
   const [userPausedListening, setUserPausedListening] = useState(false);
   const [isSocketConnected, setIsSocketConnected] = useState(socket.connected);
   const [hostType, setHostType] = useState("browser");
@@ -127,6 +129,8 @@ function App() {
     nextStartTime: 0
   });
   const listenerPeerRef = useRef(null);
+  const listenerSessionRef = useRef(null);
+  const listenerHostRef = useRef(null);
   const hostPeerConnectionsRef = useRef({});
   const linkJoinRoomRef = useRef("");
   const linkJoinRetryCountRef = useRef(0);
@@ -233,16 +237,18 @@ function App() {
   };
 
   const playRemoteAudio = async () => {
-    if (!remoteAudioRef.current) return;
-
-    try {
-      await remoteAudioRef.current.play();
-      setIsListening(true);
-      setMessage("Listening to live audio.");
-    } catch (err) {
-      console.log("Autoplay blocked.", err);
-      setMessage("Tap Start Listening to begin audio.");
-    }
+    const audio = remoteAudioRef.current;
+    if (!audio) return;
+    if (!audio.srcObject && listenerSessionRef.current?.stream) audio.srcObject = listenerSessionRef.current.stream;
+    const stream = audio.srcObject;
+    const result = await playListenerAudio(audio);
+    if (audio.srcObject !== stream) return;
+    setIsListening(result.playing);
+    setNeedsUserAudioGesture(result.needsGesture);
+    setListenerDiagnostics((previous) => ({ ...previous, playbackError: result.error, paused: audio.paused, muted: audio.muted, readyState: audio.readyState }));
+    setMessage(result.playing ? "Listening to live audio." : result.needsGesture
+      ? "Tap Start Listening to allow phone audio playback."
+      : `Audio playback could not start (${result.error}). Retry audio connection.`);
   };
 
   const getAudioChunkBytes = (chunk) => {
@@ -525,39 +531,28 @@ function App() {
     return pc;
   };
 
-  const createListenerPeerConnection = (hostSocketId) => {
-    const pc = new RTCPeerConnection(rtcConfig);
-
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        socket.emit("webrtc-ice-candidate", {
-          target: hostSocketId,
-          candidate: event.candidate
-        });
-      }
-    };
-
-    pc.ontrack = async (event) => {
-      if (remoteAudioRef.current) {
-        remoteAudioRef.current.srcObject = event.streams[0];
-        await playRemoteAudio();
-      }
-    };
-
-    pc.onconnectionstatechange = () => {
-      if (
-        pc.connectionState === "failed" ||
-        pc.connectionState === "closed" ||
-        pc.connectionState === "disconnected"
-      ) {
-        if (listenerPeerRef.current === pc) {
+  const getListenerSession = () => {
+    if (!listenerSessionRef.current) listenerSessionRef.current = new ListenerWebRTC({
+      createPeer: () => new RTCPeerConnection(rtcConfig),
+      send: (event, payload) => socket.emit(event, payload),
+      onPeer: (pc) => { listenerPeerRef.current = pc; },
+      onStream: (stream) => {
+        if (!remoteAudioRef.current) return;
+        remoteAudioRef.current.srcObject = stream;
+        if (!userPausedListeningRef.current) void playRemoteAudio();
+      },
+      onDiagnostic: (diagnostic) => {
+        const audio = remoteAudioRef.current;
+        setListenerDiagnostics((previous) => ({ ...previous, ...diagnostic,
+          paused: audio?.paused ?? true, muted: audio?.muted ?? false, readyState: audio?.readyState ?? 0,
+          elementError: audio?.error?.code || null }));
+        if (["failed", "disconnected"].includes(diagnostic.connection)) {
           setIsListening(false);
-          setMessage("Audio connection was interrupted.");
+          setMessage("Audio connection interrupted. Check ICE diagnostics or Retry audio connection.");
         }
       }
-    };
-
-    return pc;
+    });
+    return listenerSessionRef.current;
   };
 
   const cleanupHostConnections = () => {
@@ -566,11 +561,9 @@ function App() {
   };
 
   const cleanupListenerConnection = () => {
-    if (listenerPeerRef.current) {
-      const pc = listenerPeerRef.current;
-      listenerPeerRef.current = null;
-      pc.close();
-    }
+    listenerSessionRef.current?.close();
+    listenerPeerRef.current = null;
+    setListenerDiagnostics({});
 
     if (remoteAudioRef.current) {
       remoteAudioRef.current.pause();
@@ -686,7 +679,7 @@ function App() {
         offer
       });
     } catch (error) {
-      console.error("Error creating offer:", error);
+      console.warn("WebRTC offer error:", errorName(error));
       setMessage("Failed to create live audio connection.");
     }
   };
@@ -764,6 +757,7 @@ function App() {
       setMembers(data.members);
       setIsHostLive(Boolean(data.isBroadcasting));
       isHostLiveRef.current = Boolean(data.isBroadcasting);
+      listenerHostRef.current = data.members?.[0] || null;
       hostTypeRef.current = data.hostType || "browser";
       setHostType(data.hostType || "browser");
       applianceDetailsRef.current = data.appliance || null;
@@ -787,6 +781,7 @@ function App() {
     });
 
     socket.on("room-updated", (data) => {
+      if (roleRef.current === "listener") listenerHostRef.current = data.members?.[0] || null;
       setMembers(data.members);
     });
 
@@ -976,29 +971,8 @@ function App() {
     });
 
     socket.on("webrtc-offer", async ({ sender, offer }) => {
-      if (roleRef.current !== "listener") return;
-
-      try {
-        cleanupListenerConnection();
-
-        const pc = createListenerPeerConnection(sender);
-        listenerPeerRef.current = pc;
-
-        await pc.setRemoteDescription(new RTCSessionDescription(offer));
-
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-
-        socket.emit("webrtc-answer", {
-          target: sender,
-          answer
-        });
-
-        setMessage("Connected to host audio.");
-      } catch (error) {
-        console.error("Error handling offer:", error);
-        setMessage("Failed to connect to host audio.");
-      }
+      if (roleRef.current !== "listener" || sender !== listenerHostRef.current) return;
+      await getListenerSession().offer(sender, offer);
     });
 
     socket.on("webrtc-answer", async ({ sender, answer }) => {
@@ -1010,7 +984,7 @@ function App() {
 
         await pc.setRemoteDescription(new RTCSessionDescription(answer));
       } catch (error) {
-        console.error("Error handling answer:", error);
+        console.warn("WebRTC answer error:", errorName(error));
       }
     });
 
@@ -1026,13 +1000,11 @@ function App() {
           return;
         }
 
-        if (roleRef.current === "listener" && listenerPeerRef.current) {
-          await listenerPeerRef.current.addIceCandidate(
-            new RTCIceCandidate(candidate)
-          );
+        if (roleRef.current === "listener" && sender === listenerHostRef.current) {
+          await getListenerSession().ice(sender, candidate);
         }
       } catch (error) {
-        console.error("Error adding ICE candidate:", error);
+        console.warn("WebRTC ICE error:", errorName(error));
       }
     });
 
@@ -1081,6 +1053,7 @@ function App() {
       socket.off("disconnect");
       socket.off("connect_error");
       clearRoomRejoinTimer();
+      listenerSessionRef.current?.close();
     };
   }, []);
 
@@ -1296,20 +1269,14 @@ function App() {
       return;
     }
 
-    const listenerConnectionState = listenerPeerRef.current?.connectionState;
-    const hasActiveRemoteStream =
-      remoteAudioRef.current?.srcObject instanceof MediaStream &&
-      remoteAudioRef.current.srcObject.active &&
-      remoteAudioRef.current.srcObject
-        .getAudioTracks()
-        .some((track) => track.readyState === "live");
-    const canResumeExistingAudio =
-      hasActiveRemoteStream &&
-      (listenerConnectionState === "connected" ||
-        listenerConnectionState === "completed");
-
-    if (canResumeExistingAudio) {
+    const session = getListenerSession();
+    if (session.stream && remoteAudioRef.current) remoteAudioRef.current.srcObject = session.stream;
+    const audio = remoteAudioRef.current;
+    const hasStream = audio?.srcObject?.getAudioTracks().some((track) => track.readyState === "live");
+    if (hasStream) {
       await playRemoteAudio();
+    } else if (session.negotiating) {
+      setMessage("Connecting audio. Waiting for SDP/ICE negotiation…");
     } else {
       cleanupListenerConnection();
       socket.emit("request-stream");
@@ -1450,9 +1417,9 @@ function App() {
         return;
       }
 
-      setTimeout(startListening, 0);
+      if (!needsUserAudioGesture) setTimeout(startListening, 0);
     }
-  }, [hostType, isHostLive, role, isListening, userPausedListening]);
+  }, [hostType, isHostLive, role, isListening, userPausedListening, needsUserAudioGesture]);
 
   if (isPrintBoxPage) {
     return <PrintBoxPage />;
@@ -1533,6 +1500,7 @@ function App() {
       reconnectAudio={reconnectAudio}
       resumeApplianceAudio={resumeApplianceAudioFromGesture}
       needsUserAudioGesture={needsUserAudioGesture}
+      diagnostics={listenerDiagnostics}
       remoteAudioRef={remoteAudioRef}
       listenerCount={Math.max(members.length - 1, 0)}
       isSocketConnected={isSocketConnected}

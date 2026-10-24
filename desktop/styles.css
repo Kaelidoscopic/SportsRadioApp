@@ -4,3 +4,4 @@ h1 { font-size: 25px; margin: 0; } section { padding: 16px; border: 1px solid #4
 label { display: block; margin: 8px 0 4px; } input { box-sizing: border-box; width: 100%; padding: 8px; color: inherit; background: #1f2937; border: 1px solid #6b7280; border-radius: 4px; }
 button { padding: 8px 12px; margin: 8px 6px 0 0; border: 1px solid #94a3b8; border-radius: 4px; cursor: pointer; } button:disabled { opacity: .45; cursor: default; }
 #start { background: #166534; color: white; } #message { padding: 12px; background: #1f2937; border-radius: 6px; } #join { display: flex; align-items: center; gap: 16px; } #join-url { overflow-wrap: anywhere; } #qr { width: 160px; height: 160px; } #peer, small { color: #cbd5e1; } #connection { margin-left: 8px; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
