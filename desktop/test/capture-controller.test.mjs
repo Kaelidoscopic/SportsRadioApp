@@ -13,11 +13,14 @@ const bridge = () => ({ armCapture: async () => {}, disarmCapture: async () => {
 
 test('loopback forwards only audio, keeps internal video, and stops all raw tracks', async () => {
   const raw = streamFixture(); let requested;
-  const capture = new WindowsLoopbackCapture({ bridge: bridge(), mediaDevices: { getDisplayMedia: async (options) => { requested = options; return raw; } }, makeStream: (tracks) => ({ getAudioTracks: () => tracks }) });
+  let observed, released = 0;
+  const capture = new WindowsLoopbackCapture({ bridge: bridge(), monitor: { start(stream) { observed = stream; }, stop() { released++; } }, mediaDevices: { getDisplayMedia: async (options) => { requested = options; return raw; } }, makeStream: (tracks) => ({ getAudioTracks: () => tracks }) });
   const stream = await capture.start();
+  assert.equal(observed, stream); assert.equal(observed.getAudioTracks()[0], raw.audio);
   assert.equal(requested.audio.echoCancellation, false);
   assert.deepEqual(stream.getAudioTracks(), [raw.audio]); assert.equal(raw.video.stopped, 0);
   capture.stop(); assert.equal(raw.audio.stopped, 1); assert.equal(raw.video.stopped, 1);
+  assert.equal(released, 1);
 });
 
 test('Stop during pending native capture disposes the late stream', async () => {
@@ -75,4 +78,29 @@ test('room closure and denied capture cancel restart intent', async () => {
   controller.update({ connected: true, ready: false, members: [] }); assert.equal(controller.wantLive, false);
   const denied = controllerFixture(async () => { throw new Error('denied'); }); denied.controller.update(ready);
   await assert.rejects(denied.controller.start(), /denied/); assert.equal(denied.controller.wantLive, false); assert.equal(denied.calls.stop, 1);
+});
+
+test('repeated Stop/Start reacquires capture and offers to every current listener', async () => {
+  const { controller, calls } = controllerFixture(); controller.update(ready);
+  for (let cycle = 0; cycle < 3; cycle++) {
+    await controller.start(); assert.equal(controller.live, true);
+    controller.stop(); assert.equal(controller.live, false);
+  }
+  assert.equal(calls.start, 3); assert.equal(calls.stop, 3); assert.equal(calls.closed, 3);
+  assert.deepEqual(calls.offers, ['a', 'b', 'a', 'b', 'a', 'b']);
+  assert.deepEqual(calls.broadcasts, [true, false, true, false, true, false]);
+});
+
+test('explicit restart after output change uses fresh tracks and releases both captures', async () => {
+  const oldOutput = streamFixture(), newOutput = streamFixture(); let acquisitions = 0, monitored;
+  const capture = new WindowsLoopbackCapture({ bridge: bridge(),
+    monitor: { start(stream) { monitored = stream; }, stop() {} },
+    mediaDevices: { getDisplayMedia: async () => acquisitions++ ? newOutput : oldOutput },
+    makeStream: (tracks) => ({ getAudioTracks: () => tracks }) });
+  const first = await capture.start(); capture.stop(); const second = await capture.start();
+  assert.notEqual(second.getAudioTracks()[0], first.getAudioTracks()[0]);
+  assert.equal(second.getAudioTracks()[0], newOutput.audio); assert.equal(monitored, second);
+  assert.equal(oldOutput.audio.stopped, 1); assert.equal(oldOutput.video.stopped, 1);
+  assert.equal(newOutput.audio.stopped, 0); capture.stop();
+  assert.equal(newOutput.audio.stopped, 1); assert.equal(newOutput.video.stopped, 1);
 });

@@ -25,7 +25,7 @@ else {
     await store.initialize();
     window = new BrowserWindow({ width: 780, height: 860, minWidth: 560, minHeight: 650,
       title: 'SportsRadio Broadcaster', autoHideMenuBar: true,
-      webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true }
+      webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, backgroundThrottling: false }
     });
     const trusted = (frame) => Boolean(!window.isDestroyed() && frame && !frame.isDestroyed() && frame === window.webContents.mainFrame && frame.url === entry);
     session.defaultSession.setPermissionCheckHandler((contents, permission) => contents === window.webContents && permission === 'display-capture' && Date.now() < armedUntil);

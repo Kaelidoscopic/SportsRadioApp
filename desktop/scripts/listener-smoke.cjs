@@ -40,7 +40,7 @@ app.on('browser-window-created', (_event, window) => {
       const code = await evaluate(host, "document.getElementById('room-code').textContent");
       output.phase = 'room-created';
       await evaluate(host, "document.getElementById('start').click()");
-      await until(() => evaluate(host, "document.getElementById('broadcast').textContent === 'Live'"));
+      await until(() => evaluate(host, "document.getElementById('broadcast').textContent.startsWith('Live')"));
       output.phase = 'capture-live';
       receiver = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false } });
       receiver.webContents.setAudioMuted(true);

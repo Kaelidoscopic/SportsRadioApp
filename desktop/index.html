@@ -22,6 +22,9 @@
       <p>Room: <strong id="room-name">—</strong> · Code: <strong id="room-code">—</strong> <button id="copy">Copy room code</button></p>
       <p>Listeners in room: <strong id="listeners">0</strong> · Broadcasting: <strong id="broadcast">Stopped</strong></p>
       <div class="buttons"><button id="start">Start Broadcasting</button><button id="stop">Stop Broadcasting</button></div>
+      <p><label for="audio-level">Captured playback level</label> <meter id="audio-level" min="-100" max="0" value="-100">Capture level</meter> <span id="level-text">stopped</span></p>
+      <p id="capture-warning" role="status">Capture stopped.</p>
+      <small>Captures the Windows default playback output. Route the source application to that output in Windows Sound / Volume Mixer. Signal detection does not confirm phone playback.</small>
     </section>
     <section aria-label="Phone joining">
       <label for="listener-url">Phone listener website URL (must use the same backend)</label><input id="listener-url" type="url" spellcheck="false">

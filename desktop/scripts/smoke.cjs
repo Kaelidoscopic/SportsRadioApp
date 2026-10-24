@@ -77,7 +77,7 @@ app.on('browser-window-created', (_event, created) => {
       await waitFor(async () => {
         const state = await evaluate("({ live:document.getElementById('broadcast').textContent, message:document.getElementById('message').textContent })");
         if (/Error|failed|denied|no live|Could not|NotReadable|NotAllowed|Could not start/i.test(state.message)) throw new Error(state.message);
-        return state.live === 'Live';
+        return state.live.startsWith('Live');
       });
       results.captureStarted = true;
       await waitFor(async () => {
@@ -86,7 +86,8 @@ app.on('browser-window-created', (_event, created) => {
         return evaluate("smoke.pc.connectionState === 'connected'");
       });
       await pause(1500);
-      if (process.env.SPORTSRADIO_SMOKE_TONE === '1') {
+      if (process.env.SPORTSRADIO_SMOKE_TONE === '1' || process.env.SPORTSRADIO_SMOKE_WAV) {
+        const baseline = await evaluate("JSON.parse(document.getElementById('diagnostics').textContent)");
         // A quiet WAV rendered by a separate PowerShell/SoundPlayer process.
         const rate = 48000, seconds = 5, samples = rate * seconds;
         const wav = Buffer.alloc(44 + samples * 2);
@@ -94,15 +95,24 @@ app.on('browser-window-created', (_event, created) => {
         wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(rate, 24); wav.writeUInt32LE(rate * 2, 28);
         wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(samples * 2, 40);
         for (let i = 0; i < samples; i++) wav.writeInt16LE(Math.round(0.04 * 32767 * Math.sin(2 * Math.PI * 440 * i / rate)), 44 + i * 2);
-        const tonePath = path.join(root, 'quiet-test-tone.wav'); fs.writeFileSync(tonePath, wav);
+        const tonePath = process.env.SPORTSRADIO_SMOKE_WAV || path.join(root, 'quiet-test-tone.wav');
+        if (!process.env.SPORTSRADIO_SMOKE_WAV) fs.writeFileSync(tonePath, wav);
         playback = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `$smokeAudioPlayer = New-Object System.Media.SoundPlayer -ArgumentList '${tonePath.replace(/'/g, "''")}'; $smokeAudioPlayer.PlaySync()`], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
         let playbackError = ''; playback.stderr.on('data', (data) => { playbackError += data; });
-        let peakRms = 0;
+        let peakRms = 0, peakCapturedRms = 0, maxSourceEnergy = 0;
         for (let i = 0; i < 60; i++) {
           peakRms = Math.max(peakRms, await evaluate(`(() => { if(!smoke.analyser) return 0; const a=new Float32Array(smoke.analyser.fftSize); smoke.analyser.getFloatTimeDomainData(a); return Math.sqrt(a.reduce((s,x)=>s+x*x,0)/a.length); })()`));
+          const diagnostics = await evaluate("JSON.parse(document.getElementById('diagnostics').textContent)");
+          peakCapturedRms = Math.max(peakCapturedRms, diagnostics.capturedPcm?.rms || 0);
+          for (const peer of diagnostics.peers) maxSourceEnergy = Math.max(maxSourceEnergy, peer.sourceEnergy || 0);
           await pause(100);
         }
-        results.externalPlayback = { process: 'PowerShell System.Media.SoundPlayer', peakReceivedRms: peakRms, exitCode: playback.exitCode, error: playbackError || null };
+        if (playback.exitCode === null) throw new Error('External WAV must finish within the 6-second measurement window.');
+        if (playback.exitCode !== 0 || playbackError) throw new Error('External WAV playback failed.');
+        await pause(5500);
+        const after = await evaluate("JSON.parse(document.getElementById('diagnostics').textContent)");
+        results.externalPlayback = { process: 'PowerShell System.Media.SoundPlayer', peakReceivedRms: peakRms, peakCapturedRms, maxSourceEnergy, beforePcm: baseline.capturedPcm, afterPcm: after.capturedPcm, exitCode: playback.exitCode, error: playbackError || null };
+        if (peakCapturedRms <= 0.0001 || after.capturedPcm?.status !== 'silent') throw new Error('PCM meter did not rise during external playback and report silence after it stopped.');
       }
       results.transport = await evaluate(`(async () => {
         const stats=await smoke.pc.getStats(); const inbound=[];

@@ -1,7 +1,8 @@
 export class WindowsLoopbackCapture {
-  constructor({ bridge, mediaDevices = navigator.mediaDevices, makeStream = (tracks) => new MediaStream(tracks) }) {
+  constructor({ bridge, mediaDevices = navigator.mediaDevices, makeStream = (tracks) => new MediaStream(tracks), monitor = null }) {
     this.bridge = bridge; this.mediaDevices = mediaDevices; this.makeStream = makeStream;
     this.raw = null; this.generation = 0; this.pending = null; this.onended = () => {};
+    this.monitor = monitor;
   }
   start() {
     if (this.pending) return this.pending;
@@ -30,10 +31,13 @@ export class WindowsLoopbackCapture {
       this.stop(); this.onended();
     }, { once: true }));
     // Keep the API's video track alive internally for capture compatibility, but never send it.
-    return this.makeStream(audio);
+    const stream = this.makeStream(audio);
+    this.monitor?.start(stream);
+    return stream;
   }
   stop() {
     this.generation++; this.pending = null;
+    this.monitor?.stop();
     const raw = this.raw; this.raw = null;
     raw?.getTracks().forEach((track) => track.stop());
     this.bridge.disarmCapture().catch(() => {});

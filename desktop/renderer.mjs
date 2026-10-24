@@ -1,16 +1,30 @@
 import { WindowsLoopbackCapture } from './src/capture/windows-loopback.mjs';
 import { WebRTCTransport } from './src/webrtc-transport.mjs';
 import { BroadcastController } from './src/broadcast-controller.mjs';
+import { AudioLevelMonitor } from './src/capture/audio-level.mjs';
 
 const bridge = window.broadcaster;
 const $ = (id) => document.getElementById(id);
 const report = (message) => { $('message').textContent = message; };
 const transport = new WebRTCTransport({ signal: (payload) => bridge.signal(payload), report: (message) => { $('peer').textContent = message; } });
-const capture = new WindowsLoopbackCapture({ bridge });
+const monitor = new AudioLevelMonitor();
+const capture = new WindowsLoopbackCapture({ bridge, monitor });
+let level = { status: 'stopped' };
+function renderLevel() {
+  level = monitor.sample();
+  $('audio-level').value = level.dbfs === null || level.dbfs === undefined ? -100 : Math.max(-100, Math.min(0, level.dbfs));
+  $('level-text').textContent = level.dbfs == null ? level.status : `${level.dbfs.toFixed(1)} dBFS · ${level.status}`;
+  $('capture-warning').textContent = level.message;
+  $('broadcast').textContent = state.broadcasting
+    ? level.status === 'silent' ? 'Live · capture silent' : level.status === 'unavailable' ? 'Live · audio unverified' : level.status === 'signal' ? 'Live · signal detected' : 'Live · waiting for audio'
+    : 'Stopped';
+}
+const levelTimer = setInterval(renderLevel, 100);
 const diagnosticTimer = setInterval(async () => {
   await transport.sample();
   $('diagnostics').textContent = JSON.stringify({
     capture: capture.raw ? capture.raw.getAudioTracks().map((track) => ({ source: 'Windows loopback', state: track.readyState, enabled: track.enabled, muted: track.muted })) : 'stopped',
+    capturedPcm: level,
     peers: transport.snapshot()
   }, null, 2);
 }, 2000);
@@ -58,7 +72,7 @@ action('start', () => controller.start());
 $('stop').addEventListener('click', () => { controller.stop(); controls(); });
 action('copy', () => bridge.copyCode());
 action('qr-button', qr);
-window.addEventListener('beforeunload', () => { clearInterval(diagnosticTimer); controller.stop(); });
+window.addEventListener('beforeunload', () => { clearInterval(levelTimer); clearInterval(diagnosticTimer); controller.stop(); });
 const initial = await bridge.initial();
 $('backend').value = initial.backendUrl; $('listener-url').value = initial.listenerUrl;
 $('version').textContent = `Broadcaster ${initial.appVersion} · Electron ${initial.electron} · Windows loopback · Audio only`;

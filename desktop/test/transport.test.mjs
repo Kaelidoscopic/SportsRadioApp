@@ -69,3 +69,17 @@ test('outbound diagnostics report source energy and RTP counters without raw net
   assert.equal(result.remoteCandidateType, 'relay');
   assert.equal(JSON.stringify(result).includes('private-'), false);
 });
+
+test('listener leaves and rejoins with a fresh peer while other listeners stay connected', async () => {
+  const { transport, peers } = fixture();
+  await transport.offer('a'); await transport.offer('b');
+  transport.retain(['b']);
+  assert.equal(peers[0].closed, true); assert.equal(peers[0].onicecandidate, null);
+  await transport.offer('a');
+  assert.equal(peers.length, 3); assert.equal(peers[1].closed, false);
+  assert.equal(peers[2].tracks[0].track, peers[1].tracks[0].track);
+  await transport.receive({ event: 'webrtc-ice-candidate', sender: 'departed', candidate: {} });
+  assert.equal(peers[2].candidates.length, 0);
+  transport.close();
+  assert.ok(peers.every((pc) => pc.closed)); assert.deepEqual(transport.snapshot(), []);
+});

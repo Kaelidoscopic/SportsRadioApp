@@ -1,14 +1,14 @@
 // Explicit allowlist: never return SDP, candidate strings/addresses, URLs or secrets.
 export function audioCounters(stats) {
-  const result = { bytesSent: 0, packetsSent: 0, sourceEnergy: 0, sourceDuration: 0, audioLevel: 0 };
+  const result = { bytesSent: 0, packetsSent: 0, sourceEnergy: null, sourceDuration: null, audioLevel: null };
   stats.forEach((stat) => {
     if (stat.type === 'outbound-rtp' && (stat.kind || stat.mediaType) === 'audio' && !stat.isRemote) {
       result.bytesSent += stat.bytesSent || 0; result.packetsSent += stat.packetsSent || 0;
     }
     if (stat.type === 'media-source' && stat.kind === 'audio') {
-      result.sourceEnergy += stat.totalAudioEnergy || 0;
-      result.sourceDuration += stat.totalSamplesDuration || 0;
-      result.audioLevel = stat.audioLevel || 0;
+      if (Number.isFinite(stat.totalAudioEnergy)) result.sourceEnergy = (result.sourceEnergy ?? 0) + stat.totalAudioEnergy;
+      if (Number.isFinite(stat.totalSamplesDuration)) result.sourceDuration = (result.sourceDuration ?? 0) + stat.totalSamplesDuration;
+      if (Number.isFinite(stat.audioLevel)) result.audioLevel = Math.max(result.audioLevel ?? 0, stat.audioLevel);
     }
     if (stat.type === 'transport' && stat.selectedCandidatePairId) {
       const pair = stats.get(stat.selectedCandidatePairId);
