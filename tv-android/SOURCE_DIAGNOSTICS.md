@@ -1,5 +1,7 @@
 # Android TV 0.3.0 — source compatibility diagnostics
 
+**Follow-up:** the later 0.3.0 test found background PCM silence despite room persistence. The 0.3.1 fix now has user-confirmed background Test Player-to-iPhone acceptance. See [0.3.1 background investigation and baseline](BACKGROUND_0_3_1.md); the acceptance below records the earlier user report and does not certify continuous background audio.
+
 The user-verified 0.2.0 baseline captures the separate SportsRadio Test Player on Hisense HiSmartTV A4 / Android TV 11 and audibly plays it on an iPhone. YouTube joins but is silent; **its root cause is not established**. Version 0.3.0 adds observation, not a different capture path or a restriction bypass. Version 0.3.0 diagnostics and Back navigation have now passed the user-reported physical acceptance below. YouTube compatibility remains unverified.
 
 ## Measurements and lifecycle

@@ -14,7 +14,8 @@ import android.os.SystemClock
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** The only AudioRecord construction path uses playback configuration, never an audio source. */
-class AndroidPlaybackCaptureAdapter(private val context: Context, private val projection: MediaProjection) : CaptureAdapter {
+class AndroidPlaybackCaptureAdapter(private val context: Context, private val projection: MediaProjection,
+    private val reportRecording: (String) -> Unit = {}) : CaptureAdapter {
     private val running = AtomicBoolean(false)
     private var worker: Thread? = null
 
@@ -45,9 +46,16 @@ class AndroidPlaybackCaptureAdapter(private val context: Context, private val pr
         worker = Thread({
             val buffer = ShortArray(480)
             var lastRead = SystemClock.elapsedRealtime()
+            var lastReport = 0L
             try {
                 Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)
                 while (running.get()) {
+                    val time = SystemClock.elapsedRealtime()
+                    if (time - lastReport >= 2000) {
+                        val silenced = runCatching { record.activeRecordingConfiguration?.isClientSilenced }.getOrNull()
+                        reportRecording("recording=${record.recordingState == AudioRecord.RECORDSTATE_RECORDING},clientSilenced=$silenced,rate=${record.sampleRate},worker=running")
+                        lastReport = time
+                    }
                     val count = record.read(buffer, 0, buffer.size, AudioRecord.READ_NON_BLOCKING)
                     if (!running.get()) break
                     if (count < 0) error("Playback read failed ($count). Stop and request capture again.")
@@ -67,6 +75,7 @@ class AndroidPlaybackCaptureAdapter(private val context: Context, private val pr
                 running.set(false)
                 try { record.stop() } catch (_: IllegalStateException) { /* Projection may already be revoked. */ }
                 record.release()
+                reportRecording("released")
             }
         }, "SportsRadioPlaybackCapture").also {
             try { it.start() } catch (error: Exception) {

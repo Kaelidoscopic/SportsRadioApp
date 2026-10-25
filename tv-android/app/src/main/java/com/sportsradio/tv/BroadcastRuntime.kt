@@ -9,6 +9,7 @@ import com.sportsradio.tv.transport.WebRtcAudioTransport
 
 /** Application-owned coordination; no activity, projection Intent or ownership secret in UI state. */
 object BroadcastRuntime {
+    @Volatile var recordingStatus = "not started"
     val captureMetrics = com.sportsradio.tv.capture.CaptureDiagnostics(android.os.SystemClock::elapsedRealtime)
     const val BACKEND = "https://sportsradioapp.onrender.com"
     const val LISTENER = "https://sports-radio-app.vercel.app"

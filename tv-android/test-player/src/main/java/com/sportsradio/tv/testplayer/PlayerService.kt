@@ -10,6 +10,16 @@ import kotlin.math.sin
 /** A distinct app/UID with explicit positive and negative playback-capture controls. */
 class PlayerService : Service() {
     private var track: AudioTrack? = null
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val diagnostics = object : Runnable {
+        override fun run() {
+            track?.let {
+                android.util.Log.i("SportsRadioPlayer", "playing=${it.playState == AudioTrack.PLAYSTATE_PLAYING} head=${it.playbackHeadPosition} eligible=$eligible")
+                handler.postDelayed(this, 2000)
+            }
+        }
+    }
+    private var eligible = false
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action !in listOf("allowed", "blocked")) { stopSelf(); return START_NOT_STICKY }
         val blocked = intent?.action == "blocked"
@@ -33,11 +43,13 @@ class PlayerService : Service() {
             track = audio
             check(audio.write(samples, 0, samples.size) == samples.size)
             check(audio.setLoopPoints(0, samples.size, -1) == AudioTrack.SUCCESS)
+            eligible = !blocked
             audio.play()
+            handler.post(diagnostics)
         } catch (_: Exception) { release(); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
         return START_NOT_STICKY
     }
-    private fun release() { track?.let { try { it.stop() } finally { it.release() } }; track = null }
+    private fun release() { handler.removeCallbacks(diagnostics); track?.let { try { it.stop() } finally { it.release() } }; track = null }
     override fun onDestroy() { release(); stopForeground(STOP_FOREGROUND_REMOVE); super.onDestroy() }
     override fun onBind(intent: Intent?): IBinder? = null
 }

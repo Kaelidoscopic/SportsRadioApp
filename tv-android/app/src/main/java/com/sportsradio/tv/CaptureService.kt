@@ -31,7 +31,7 @@ class CaptureService : Service() {
         }
     }
     private fun diagnosticReport(): String = "capture=" + BroadcastRuntime.captureMetrics.snapshot() +
-        " captureState=" + CaptureStatus.snapshot.state + " networkConnected=" + BroadcastRuntime.state.connected + " broadcasting=" + BroadcastRuntime.state.broadcasting +
+        " foregroundTypes=" + foregroundServiceType + " audioRecord=" + BroadcastRuntime.recordingStatus + " captureState=" + CaptureStatus.snapshot.state + " networkConnected=" + BroadcastRuntime.state.connected + " broadcasting=" + BroadcastRuntime.state.broadcasting +
         " listeners=" + BroadcastRuntime.state.members.size + " transport=" + BroadcastRuntime.diagnostics().replace('\n', ' ')
     override fun dump(fd: java.io.FileDescriptor, writer: java.io.PrintWriter, args: Array<out String>?) {
         writer.println(diagnosticReport())
@@ -79,7 +79,7 @@ class CaptureService : Service() {
             projectionCallback = callback
             active.registerCallback(callback, handler)
             BroadcastRuntime.prepare(this)
-            val native = AndroidPlaybackCaptureAdapter(this, active)
+            val native = AndroidPlaybackCaptureAdapter(this, active) { BroadcastRuntime.recordingStatus = it }
             // Keep control/state callbacks on main. Level UI is sampled at 10 Hz; no frame queue.
             val dispatched = object : CaptureAdapter {
                 override fun start(onFrame: (PcmFrame) -> Unit, onFailure: (String) -> Unit) {
@@ -119,7 +119,8 @@ class CaptureService : Service() {
             .setContentTitle("SportsRadio TV broadcasting").setContentText("Eligible TV playback audio to room listeners. No microphone.")
             .setContentIntent(open).setOngoing(true)
             .addAction(Notification.Action.Builder(null, "Stop capture", stop).build()).build()
-        startForeground(1, notice, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
+        startForeground(1, notice, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION or
+            (if (android.os.Build.VERSION.SDK_INT >= 30) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0))
         foreground = true
     }
 
@@ -127,6 +128,7 @@ class CaptureService : Service() {
         if (closing) return
         closing = true
         BroadcastRuntime.captureMetrics.stop(false)
+        BroadcastRuntime.recordingStatus = "stopped"
         handler.removeCallbacks(diagnosticTick)
         android.util.Log.i("SportsRadioDiag", diagnosticReport())
         BroadcastRuntime.stopMedia()

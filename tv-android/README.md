@@ -1,6 +1,6 @@
 # Android TV broadcaster
 
-**Current implementation: source diagnostics / version 0.3.0 (user-confirmed Hisense acceptance).** See [SOURCE_DIAGNOSTICS.md](SOURCE_DIAGNOSTICS.md) for physical Test Player/iPhone and Back-navigation acceptance, background statistics and ADB comparison instructions. YouTube previously produced silence and remains unverified. Stage 2 / version 0.2.0 remains the user-verified playback baseline. See [STAGE_2.md](STAGE_2.md) for broadcasting, current installation commands, physical sender/receiver results, limitations and user-confirmed audible TV-to-iPhone acceptance. The application now uses Internet access for existing signaling and WebRTC. Capture remains playback-only.
+**Current implementation: version 0.3.1 known-good baseline (user-confirmed Hisense background TV-to-iPhone playback).** See [BACKGROUND_0_3_1.md](BACKGROUND_0_3_1.md) for the physical before/after investigation, APK and test procedure. The subsequent 0.3.0 report established room persistence but revealed background PCM silencing; its earlier acceptance is historical. See [SOURCE_DIAGNOSTICS.md](SOURCE_DIAGNOSTICS.md) for physical Test Player/iPhone and Back-navigation acceptance, background statistics and ADB comparison instructions. YouTube previously produced silence and remains unverified. Stage 2 / version 0.2.0 is the historical first playback baseline. See [STAGE_2.md](STAGE_2.md) for broadcasting, current installation commands, physical sender/receiver results, limitations and user-confirmed audible TV-to-iPhone acceptance. The application now uses Internet access for existing signaling and WebRTC. Capture remains playback-only.
 
 ## Archived Stage 1 notes (0.1.0)
 
@@ -175,3 +175,5 @@ The test player is deliberately minimal: a separate foreground-service AudioTrac
 First obtain physical positive/negative controls plus nonzero PCM from the desired real source and verified Stop/revocation cleanup. Then implement an audited PCM-to-libwebrtc recording input (custom AudioDeviceModule/native bridge or a proven supported injection API), preserving this CaptureAdapter boundary. The standard WebRTC Java audio source does not automatically consume these PCM frames. Verify decoded receiver samples before adding existing secure room registration, ownership storage, signaling and phone listener. No backend rewrite is required for the prototype, but permanent room reservations remain a separate persistence gap described in `../docs/android-tv-broadcaster-plan.md`.
 
 No real-TV capture or phone streaming is claimed by this Stage 1 implementation.
+
+Current acceptance is limited to the documented Hisense/Test Player/iPhone configuration. YouTube (previously silent), Netflix, HDMI, other TV models and endurance testing remain unverified.
