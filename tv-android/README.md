@@ -1,4 +1,10 @@
-# Android TV Stage 1 — native playback capture
+# Android TV broadcaster
+
+**Current implementation: Stage 2 / version 0.2.0.** See [STAGE_2.md](STAGE_2.md) for broadcasting, current installation commands, physical sender/receiver results, limitations and user-confirmed audible TV-to-iPhone acceptance. The application now uses Internet access for existing signaling and WebRTC. Capture remains playback-only.
+
+## Archived Stage 1 notes (0.1.0)
+
+The remainder records the original capture-only stage and its verification. Stage 1 is preserved in commit `a5518eb`; statements about no network transmission and APK version 0.1.0 refer to that commit, not the current Stage 2 app. Use the Stage 2 guide to build/update the current APK.
 
 Installable local PCM diagnostic prototype for Android TV / Google TV **API 29+**. No room registration, WebRTC, microphone capture, audio recording to disk or network transmission. Neither APK requests INTERNET permission. Windows, backend, React listener and Pi files are unchanged.
 

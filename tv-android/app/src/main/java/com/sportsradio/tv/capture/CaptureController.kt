@@ -4,7 +4,7 @@ enum class CaptureState { STOPPED, STARTING, CAPTURING, SILENT, ERROR, DENIED, U
 data class CaptureSnapshot(
     val state: CaptureState = CaptureState.STOPPED,
     val levels: AudioLevels = AudioLevels(), val frames: Long = 0,
-    val message: String = "Ready. No audio leaves this device."
+    val message: String = "Ready for playback capture. Create a room to broadcast."
 )
 
 /** Lifecycle methods and callbacks are serialized by the owner (service main thread). */
@@ -29,7 +29,7 @@ class CaptureController(private val nowMillis: () -> Long, private val changed: 
                     publish(CaptureSnapshot(if (silent) CaptureState.SILENT else CaptureState.CAPTURING,
                         levels, snapshot.frames + 1, if (silent)
                             "No playback signal for 5 seconds. Play an eligible app; it may block capture. Silence alone cannot identify the cause."
-                        else "Reading playback PCM. Use Home to open a separate player. No network transmission."))
+                        else "Reading playback PCM. Use Home to open a separate player. Check sender/phone diagnostics separately."))
                 }
             }, { error -> if (generation == current) stop(CaptureState.ERROR, error) })
         } catch (error: Exception) { if (generation == current) stop(CaptureState.ERROR, error.message ?: "Capture failed.") }

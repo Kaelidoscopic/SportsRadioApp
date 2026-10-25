@@ -29,6 +29,10 @@ class CaptureService : Service() {
             CaptureStatus.publish(value)
             if (value.state == CaptureState.ERROR) finishSession()
         }
+        BroadcastRuntime.stopCapture = {
+            controller.stop(CaptureState.STOPPED, "Broadcast interrupted/stopped. Recover the room if needed, then Start Broadcasting for fresh consent.")
+            finishSession()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -59,6 +63,7 @@ class CaptureService : Service() {
             }
             projectionCallback = callback
             active.registerCallback(callback, handler)
+            BroadcastRuntime.prepare(this)
             val native = AndroidPlaybackCaptureAdapter(this, active)
             // Keep control/state callbacks on main. Level UI is sampled at 10 Hz; no frame queue.
             val dispatched = object : CaptureAdapter {
@@ -66,6 +71,7 @@ class CaptureService : Service() {
                     var last = 0L
                     val pendingFrame = java.util.concurrent.atomic.AtomicBoolean(false)
                     native.start({ frame ->
+                        BroadcastRuntime.push(frame) // Full-rate PCM, never the 10 Hz meter sample.
                         val time = SystemClock.elapsedRealtime()
                         if (time - last >= 100 && pendingFrame.compareAndSet(false, true)) {
                             last = time
@@ -76,8 +82,12 @@ class CaptureService : Service() {
                 override fun stop() = native.stop()
             }
             controller.start(dispatched)
+            if (CaptureStatus.snapshot.state != CaptureState.ERROR) BroadcastRuntime.announce()
         } catch (error: Exception) {
             controller.stop(CaptureState.ERROR, "Cannot capture playback: ${error.javaClass.simpleName}. ${error.message ?: "Try fresh consent or another supported TV."}")
+            finishSession()
+        } catch (_: LinkageError) {
+            controller.stop(CaptureState.ERROR, "Native WebRTC library could not load on this TV. Capture stopped; report device ABI and app version.")
             finishSession()
         }
         return START_NOT_STICKY // Never replay a one-use consent intent after process death.
@@ -89,7 +99,7 @@ class CaptureService : Service() {
         val stop = PendingIntent.getService(this, 1, Intent(this, CaptureService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val open = PendingIntent.getActivity(this, 2, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val notice = Notification.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.ic_menu_view)
-            .setContentTitle("SportsRadio playback capture").setContentText("Local PCM diagnostics only. No microphone or streaming.")
+            .setContentTitle("SportsRadio TV broadcasting").setContentText("Eligible TV playback audio to room listeners. No microphone.")
             .setContentIntent(open).setOngoing(true)
             .addAction(Notification.Action.Builder(null, "Stop capture", stop).build()).build()
         startForeground(1, notice, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
@@ -99,6 +109,7 @@ class CaptureService : Service() {
     private fun finishSession() {
         if (closing) return
         closing = true
+        BroadcastRuntime.stopMedia()
         val active = projection; projection = null
         projectionCallback?.let { active?.unregisterCallback(it) }; projectionCallback = null
         active?.stop()
@@ -110,6 +121,7 @@ class CaptureService : Service() {
         controller.stop(CaptureStatus.snapshot.state.takeIf { it == CaptureState.ERROR } ?: CaptureState.STOPPED,
             CaptureStatus.snapshot.message)
         finishSession(); handler.removeCallbacksAndMessages(null)
+        BroadcastRuntime.stopCapture = null
         super.onDestroy()
     }
     override fun onTaskRemoved(rootIntent: Intent?) { controller.stop(); finishSession() }
