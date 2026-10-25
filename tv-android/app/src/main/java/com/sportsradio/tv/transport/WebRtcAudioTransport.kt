@@ -19,6 +19,9 @@ class WebRtcAudioTransport(context: Context, private val main: Handler,
     private lateinit var track: AudioTrack
     private var disposed = false
     private val active = mutableSetOf<PeerConnection>()
+    private val connectionStates = mutableMapOf<PeerConnection, String>()
+    private val health = TransportDiagnostics()
+    private var healthSummary = "Waiting for sender statistics"
     private val counters = mutableMapOf<PeerConnection, Pair<Long, Long>>()
     var bytesSent = 0L; private set
     var packetsSent = 0L; private set
@@ -60,10 +63,11 @@ class WebRtcAudioTransport(context: Context, private val main: Handler,
         val config = PeerConnection.RTCConfiguration(listOf(PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer())).apply {
             sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
         }
+        var ownedPeer: PeerConnection? = null
         val pc = requireNotNull(factory.createPeerConnection(config, object : PeerConnection.Observer {
             override fun onIceCandidate(candidate: IceCandidate) { main.post { if (!disposed) ice(JSONObject()
                 .put("candidate", candidate.sdp).put("sdpMid", candidate.sdpMid).put("sdpMLineIndex", candidate.sdpMLineIndex)) } }
-            override fun onConnectionChange(value: PeerConnection.PeerConnectionState) { main.post { if (!disposed) state(value.name.lowercase()) } }
+            override fun onConnectionChange(value: PeerConnection.PeerConnectionState) { main.post { if (!disposed) { ownedPeer?.takeIf { it in active }?.let { connectionStates[it] = value.name.lowercase(); state(value.name.lowercase()) } } } }
             override fun onIceConnectionChange(value: PeerConnection.IceConnectionState) { main.post { if (!disposed && value == PeerConnection.IceConnectionState.FAILED) state("failed") } }
             override fun onSignalingChange(value: PeerConnection.SignalingState) {}
             override fun onIceConnectionReceivingChange(receiving: Boolean) {}
@@ -74,6 +78,8 @@ class WebRtcAudioTransport(context: Context, private val main: Handler,
             override fun onDataChannel(channel: DataChannel) { channel.close() }
             override fun onRenegotiationNeeded() {}
         }))
+        ownedPeer = pc
+        connectionStates[pc] = "new"
         pc.addTransceiver(track, RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_ONLY, listOf("sportsradio")))
         active.add(pc)
         return object : PeerDriver {
@@ -95,13 +101,16 @@ class WebRtcAudioTransport(context: Context, private val main: Handler,
             }
             override fun close() {
                 if (closed) return
-                closed = true; active.remove(pc); counters.remove(pc)
+                closed = true; active.remove(pc); counters.remove(pc); connectionStates.remove(pc)
                 bytesSent = counters.values.sumOf { it.first }; packetsSent = counters.values.sumOf { it.second }
                 pc.close(); pc.dispose()
             }
         }
     }
+    fun diagnosticSummary(): String = healthSummary
     fun sample() {
+        healthSummary = health.sample(packetsSent, bytesSent, nativeBlocks, nativeEnergy, active.size,
+            connectionStates.values.count { it == "connected" }, connectionStates.values.count { it == "failed" })
         active.toList().forEach { pc -> pc.getStats { stats ->
             var bytes = 0L; var packets = 0L
             stats.statsMap.values.filter { it.type == "outbound-rtp" && (it.members["kind"] ?: it.members["mediaType"]) == "audio" }.forEach {

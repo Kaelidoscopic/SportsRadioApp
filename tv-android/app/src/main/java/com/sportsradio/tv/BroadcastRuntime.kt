@@ -9,6 +9,7 @@ import com.sportsradio.tv.transport.WebRtcAudioTransport
 
 /** Application-owned coordination; no activity, projection Intent or ownership secret in UI state. */
 object BroadcastRuntime {
+    val captureMetrics = com.sportsradio.tv.capture.CaptureDiagnostics(android.os.SystemClock::elapsedRealtime)
     const val BACKEND = "https://sportsradioapp.onrender.com"
     const val LISTENER = "https://sports-radio-app.vercel.app"
     private val main = Handler(Looper.getMainLooper())
@@ -17,6 +18,8 @@ object BroadcastRuntime {
     var state = RoomState(); private set
     var peerMessage = "No active audio peers."; private set
     var stopCapture: (() -> Unit)? = null
+    /** Reopening the activity must not replace an existing or reconnecting room session. */
+    fun ensureSession(context: Context) { if (room == null) connect(context) }
     fun connect(context: Context) {
         if (room != null && state.connected) { if (!state.ready) room?.recover(); return }
         room?.close()
@@ -42,7 +45,7 @@ object BroadcastRuntime {
         room?.connect()
     }
     fun create(name: String) { room?.register(name) }
-    fun end() { stopCapture?.invoke(); stopMedia(); room?.end() }
+    fun end() { captureMetrics.stop(false); stopCapture?.invoke(); stopMedia(); room?.end() }
     fun prepare(context: Context) {
         check(state.ready && state.connected) { "Create or recover a room before broadcasting." }
         closeTransport()
@@ -51,14 +54,15 @@ object BroadcastRuntime {
             { peerMessage = it }, { stopCapture?.invoke() })
     }
     /** Called on the AudioPlaybackCapture worker for EVERY PCM frame, before UI sampling. */
-    fun push(frame: PcmFrame) { transport?.pcm?.push(frame.samples, frame.sampleRate, frame.channels) }
+    fun push(frame: PcmFrame) { captureMetrics.frame(frame.samples); transport?.pcm?.push(frame.samples, frame.sampleRate, frame.channels) }
     fun announce() { check(transport != null && state.ready); room?.broadcast(true) }
     private fun closeTransport() { val previous = transport; transport = null; previous?.close() }
     fun stopMedia() { closeTransport(); room?.broadcast(false); peerMessage = "Broadcast stopped. Playback PCM released." }
+    fun pollDiagnostics() { transport?.sample() }
     fun diagnostics(): String {
         val active = transport ?: return peerMessage
-        active.sample()
-        return "$peerMessage\nPeers: ${active.peers.count()} • RTP packets: ${active.packetsSent} • bytes: ${active.bytesSent}" +
+
+        return "${active.diagnosticSummary()}\n$peerMessage\nPeers: ${active.peers.count()} • RTP packets: ${active.packetsSent} • bytes: ${active.bytesSent}" +
             "\nNative input callbacks: ${active.nativeBlocks} • input energy: ${"%.6f".format(java.util.Locale.US, active.nativeEnergy)}" +
             "\nCaptured PCM blocks pulled: ${active.pcm.delivered}" +
             "\nQueue drops: ${active.pcm.dropped} • underruns: ${active.pcm.underruns}"

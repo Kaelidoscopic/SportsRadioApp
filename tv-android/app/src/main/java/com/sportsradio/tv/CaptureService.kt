@@ -23,13 +23,27 @@ class CaptureService : Service() {
     private lateinit var controller: CaptureController
     private var closing = false
 
+    private val diagnosticTick = object : Runnable {
+        override fun run() {
+            BroadcastRuntime.pollDiagnostics()
+            android.util.Log.i("SportsRadioDiag", diagnosticReport())
+            if (!closing) handler.postDelayed(this, 2000)
+        }
+    }
+    private fun diagnosticReport(): String = "capture=" + BroadcastRuntime.captureMetrics.snapshot() +
+        " captureState=" + CaptureStatus.snapshot.state + " networkConnected=" + BroadcastRuntime.state.connected + " broadcasting=" + BroadcastRuntime.state.broadcasting +
+        " listeners=" + BroadcastRuntime.state.members.size + " transport=" + BroadcastRuntime.diagnostics().replace('\n', ' ')
+    override fun dump(fd: java.io.FileDescriptor, writer: java.io.PrintWriter, args: Array<out String>?) {
+        writer.println(diagnosticReport())
+    }
     override fun onCreate() {
         super.onCreate()
         controller = CaptureController(SystemClock::elapsedRealtime) { value ->
             CaptureStatus.publish(value)
-            if (value.state == CaptureState.ERROR) finishSession()
+            if (value.state == CaptureState.ERROR) { BroadcastRuntime.captureMetrics.stop(true); finishSession() }
         }
         BroadcastRuntime.stopCapture = {
+            BroadcastRuntime.captureMetrics.stop(true)
             controller.stop(CaptureState.STOPPED, "Broadcast interrupted/stopped. Recover the room if needed, then Start Broadcasting for fresh consent.")
             finishSession()
         }
@@ -57,6 +71,7 @@ class CaptureService : Service() {
             val callback = object : MediaProjection.Callback() {
                 override fun onStop() {
                     if (projection !== active) return
+                    BroadcastRuntime.captureMetrics.stop(true)
                     controller.stop(CaptureState.STOPPED, "Android revoked projection. Start again to request fresh consent.")
                     finishSession()
                 }
@@ -81,6 +96,8 @@ class CaptureService : Service() {
                 }
                 override fun stop() = native.stop()
             }
+            BroadcastRuntime.captureMetrics.start()
+            handler.post(diagnosticTick)
             controller.start(dispatched)
             if (CaptureStatus.snapshot.state != CaptureState.ERROR) BroadcastRuntime.announce()
         } catch (error: Exception) {
@@ -109,6 +126,9 @@ class CaptureService : Service() {
     private fun finishSession() {
         if (closing) return
         closing = true
+        BroadcastRuntime.captureMetrics.stop(false)
+        handler.removeCallbacks(diagnosticTick)
+        android.util.Log.i("SportsRadioDiag", diagnosticReport())
         BroadcastRuntime.stopMedia()
         val active = projection; projection = null
         projectionCallback?.let { active?.unregisterCallback(it) }; projectionCallback = null
@@ -118,13 +138,14 @@ class CaptureService : Service() {
     }
 
     override fun onDestroy() {
+        if (!closing) BroadcastRuntime.captureMetrics.stop(true)
         controller.stop(CaptureStatus.snapshot.state.takeIf { it == CaptureState.ERROR } ?: CaptureState.STOPPED,
             CaptureStatus.snapshot.message)
         finishSession(); handler.removeCallbacksAndMessages(null)
         BroadcastRuntime.stopCapture = null
         super.onDestroy()
     }
-    override fun onTaskRemoved(rootIntent: Intent?) { controller.stop(); finishSession() }
+    override fun onTaskRemoved(rootIntent: Intent?) { BroadcastRuntime.captureMetrics.stop(true); controller.stop(); finishSession() }
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {

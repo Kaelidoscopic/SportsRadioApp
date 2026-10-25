@@ -1,6 +1,6 @@
 # Android TV broadcaster
 
-**Current implementation: Stage 2 / version 0.2.0.** See [STAGE_2.md](STAGE_2.md) for broadcasting, current installation commands, physical sender/receiver results, limitations and user-confirmed audible TV-to-iPhone acceptance. The application now uses Internet access for existing signaling and WebRTC. Capture remains playback-only.
+**Current implementation: source diagnostics / version 0.3.0 (user-confirmed Hisense acceptance).** See [SOURCE_DIAGNOSTICS.md](SOURCE_DIAGNOSTICS.md) for physical Test Player/iPhone and Back-navigation acceptance, background statistics and ADB comparison instructions. YouTube previously produced silence and remains unverified. Stage 2 / version 0.2.0 remains the user-verified playback baseline. See [STAGE_2.md](STAGE_2.md) for broadcasting, current installation commands, physical sender/receiver results, limitations and user-confirmed audible TV-to-iPhone acceptance. The application now uses Internet access for existing signaling and WebRTC. Capture remains playback-only.
 
 ## Archived Stage 1 notes (0.1.0)
 
