@@ -10,3 +10,5 @@ server/node_modules
 dist
 desktop/release
 desktop/.smoke
+
+client/dist-staging

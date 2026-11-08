@@ -67,6 +67,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.sportsradio.tv.device.DevicePairingRuntime.ensure(this)
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() = navigation.onBack()
         })
@@ -75,9 +76,10 @@ class MainActivity : ComponentActivity() {
         cancelled = savedInstanceState?.getBoolean("cancelled") ?: false
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 32, 48, 32) }
         fun label(text: String, size: Float = 20f) = TextView(this).apply { this.text = text; textSize = size; setPadding(0, 8, 0, 8); column.addView(this) }
-        label("SportsRadio TV • Broadcaster 0.3.1", 28f)
+        label("SportsRadio TV • Broadcaster ${BuildConfig.VERSION_NAME}", 28f)
         label("Broadcast eligible TV playback to phones. No microphone. Stop/Start requires fresh Android capture consent.")
         label("Android requires recording permission (it may be labelled Microphone) and projection consent for playback capture. Only eligible apps can be captured; this does not bypass their policy.")
+        Button(this).apply { text = "Pair TV to Account"; setOnClickListener { startActivity(Intent(this@MainActivity, com.sportsradio.tv.device.PairDeviceActivity::class.java)) }; column.addView(this) }
         val name = EditText(this).apply { setSingleLine(); setText("Android TV playback"); hint = "Room name"; column.addView(this) }
         val connect = Button(this).apply { text = "Connect / Recover Saved Room"; setOnClickListener { BroadcastRuntime.connect(this@MainActivity) }; column.addView(this) }
         Button(this).apply { text = "Create New Room"; setOnClickListener { BroadcastRuntime.create(name.text.toString()) }; column.addView(this) }

@@ -4,6 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "start:hosted-staging": "node start-hosted-staging.js",
+    "start:staging": "node start-staging.js",
     "pi-host": "node pi-host.js",
     "test": "node --test"
   },

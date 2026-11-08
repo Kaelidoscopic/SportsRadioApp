@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "backendUrl": "https://synclink-staging-api.invalid",
+  "frontendUrl": "https://synclink-staging-web.invalid",
+  "deploymentId": "synclink-hosted-staging"
+}

@@ -1,9 +1,9 @@
+import { authTokenKey, authUserKey } from "./auth-storage";
 import { useState } from "react";
+import MyDevices from "./MyDevices";
 import QRScanner from "./QRScanner";
 import MyAudioBoxesDashboard from "./MyAudioBoxesDashboard";
 
-const authTokenKey = "sportsAudioAuthToken";
-const authUserKey = "sportsAudioAuthUser";
 
 const getApiUrl = () => {
   if (import.meta.env.VITE_BACKEND_URL) return import.meta.env.VITE_BACKEND_URL;
@@ -20,7 +20,7 @@ function LandingPage({
   isSocketConnected,
   preferredMode = null
 }) {
-  const [mode, setMode] = useState(null);
+  const [mode, setMode] = useState(window.location.hash === "#devices" ? "devices" : null);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [authMode, setAuthMode] = useState("login");
   const [authReturnMode, setAuthReturnMode] = useState("host");
@@ -74,6 +74,8 @@ function LandingPage({
   };
 
   const signOut = () => {
+    const token = localStorage.getItem(authTokenKey);
+    if (token) fetch(`${getApiUrl()}/api/auth/logout`, { method: "POST", headers: { authorization: `Bearer ${token}` } }).catch(() => {});
     localStorage.removeItem(authTokenKey);
     localStorage.removeItem(authUserKey);
     setMode("landing");
@@ -139,6 +141,10 @@ function LandingPage({
     }, 0);
   };
 
+  if (activeMode === "devices") {
+    if (!isLoggedIn) return <div className="page-shell"><div className="main-card"><h1>My Devices</h1><button className="primary-button" onClick={() => openAuth("devices")}>Sign in to pair your TV</button><button onClick={() => setMode("landing")}>Back</button></div></div>;
+    return <MyDevices onBack={() => setMode("landing")} onSignIn={() => openAuth("devices")} />;
+  }
   if (activeMode === "boxes") {
     return (
       <MyAudioBoxesDashboard
@@ -239,6 +245,7 @@ function LandingPage({
             </button>
           </div>
 
+          <button className="ghost-button" onClick={() => setMode("devices")}>My Devices / Pair TV</button>
           <div className="small-link-row">
             <button className="text-link-button" onClick={() => setMode("settings")}>
               Settings
@@ -516,6 +523,7 @@ function LandingPage({
             Back
           </button>
 
+          <button className="ghost-button" onClick={() => setMode("devices")}>My Devices / Pair TV</button>
           <div className="brand-block centered-brand">
             <h1 className="app-title">{activeMode === "settings" ? "Settings" : "Help"}</h1>
             <p className="app-subtitle">

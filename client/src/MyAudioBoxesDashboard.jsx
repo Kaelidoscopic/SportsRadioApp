@@ -1,6 +1,5 @@
+import { authTokenKey, authUserKey } from "./auth-storage";
 import { useCallback, useEffect, useState } from "react";
-const authTokenKey = "sportsAudioAuthToken";
-const authUserKey = "sportsAudioAuthUser";
 const printPayloadPrefix = "sportsAudioPrintBox:";
 
 const getApiUrl = () => {

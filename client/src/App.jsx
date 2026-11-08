@@ -1,3 +1,4 @@
+import { storageKey } from "./auth-storage";
 import { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import LandingPage from "./LandingPage";
@@ -33,8 +34,8 @@ const rtcConfig = {
 const getMediaDevices = () => navigator.mediaDevices || null;
 const mediaUnavailableMessage =
   "Audio input capture requires HTTPS or localhost.";
-const savedListenerRoomKey = "venueAudioListenerRoomCode";
-const savedListenerWasListeningKey = "venueAudioListenerWasListening";
+const savedListenerRoomKey = storageKey("venueAudioListenerRoomCode");
+const savedListenerWasListeningKey = storageKey("venueAudioListenerWasListening");
 
 const getToastType = (text) => {
   const value = String(text || "").toLowerCase();

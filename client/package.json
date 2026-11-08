@@ -4,9 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "build:hosted-staging": "node ../tools/hosted-staging/manage.cjs frontend",
     "test": "node --test test/*.test.mjs",
     "dev": "vite",
     "build": "vite build",
+    "build:staging": "vite build --mode staging",
     "lint": "eslint .",
     "preview": "vite preview"
   },

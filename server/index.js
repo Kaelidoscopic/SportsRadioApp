@@ -12,17 +12,28 @@ const {
   createApplianceAudioHandler,
   validateAudioChunk
 } = require("./appliance-audio");
-require("dotenv").config();
+// Staging never reads the production-oriented local .env file.
+if (process.env.SPORTSYNC_ENVIRONMENT !== "staging") require("dotenv").config();
+const { deploymentConfig, assertDatabaseEnvironment, stampDatabase } = require("./deployment-config");
+const deployment = deploymentConfig(process.env);
+const originAllowed = origin => !origin || origin === deployment.frontendOrigin;
 
 const app = express();
-app.use(cors());
+app.use(cors(deployment.environment === "staging" ? { origin: (origin, callback) => callback(null, originAllowed(origin)) } : {}));
 app.use(express.json({ limit: "10mb" }));
+app.use((error, req, res, next) => {
+  if (req.path.startsWith("/api/devices") || req.path.startsWith("/api/auth")) {
+    return res.status(error.status === 413 ? 413 : 400).json({ error: "INVALID_REQUEST" });
+  }
+  next(error);
+});
 
 const server = http.createServer(app);
 
 const io = new Server(server, {
+  ...(deployment.environment === "staging" ? {allowRequest: (req, callback) => callback(null, originAllowed(req.headers.origin))} : {}),
   cors: {
-    origin: "*",
+    origin: deployment.environment === "staging" ? deployment.frontendOrigin : "*",
     methods: ["GET", "POST"]
   }
 });
@@ -39,10 +50,13 @@ const MAX_AUDIO_CHUNK_BYTES = Number(
 );
 
 const DB_PATH =
-  process.env.SPORTSYNC_DB_PATH ||
+  deployment.database ||
   path.join(__dirname, "data", "sports-sync.sqlite");
+assertDatabaseEnvironment(DB_PATH, deployment);
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 const db = new DatabaseSync(DB_PATH);
+stampDatabase(db, deployment);
+app.get("/api/deployment", (_req,res) => res.json({environment: deployment.environment, deploymentId:deployment.id || null}));
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     user_id TEXT PRIMARY KEY,
@@ -272,30 +286,30 @@ const toUserDto = (user) => ({
   createdAt: user.createdAt
 });
 
+const { createDeviceRegistry, installDeviceRoutes, createLimiter } = require("./device-pairing");
+db.exec(`CREATE TABLE IF NOT EXISTS auth_sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(user_id), expires_at INTEGER NOT NULL);
+  DELETE FROM sessions;`); // Revoke legacy unbounded plaintext sessions; accounts remain valid.
+const authLimit = createLimiter(db);
+app.use("/api/auth", (_req,res,next) => { res.set("Cache-Control","no-store"); next(); });
+app.use(["/api/auth/login", "/api/auth/signup"], (req,res,next) => {
+  try { authLimit(`auth-ip:${req.ip}`,20,900000); next(); }
+  catch { res.status(429).json({ error: "Too many login attempts. Try again later." }); }
+});
 const createSession = (userId) => {
   const token = crypto.randomBytes(32).toString("hex");
-  db.prepare(
-    "INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)"
-  ).run(token, userId, nowIso());
+  db.prepare("DELETE FROM auth_sessions WHERE expires_at <= ?").run(Date.now());
+  db.prepare("INSERT INTO auth_sessions VALUES (?, ?, ?)").run(deployment.sessionHash(token), userId, Date.now()+7*86400000);
   return token;
 };
-
 const getAuthUser = (req) => {
-  const authHeader = String(req.get("authorization") || "");
-
-  if (!authHeader.toLowerCase().startsWith("bearer ")) return null;
-
-  const token = authHeader.slice(7).trim();
-  const session = db
-    .prepare("SELECT user_id FROM sessions WHERE token = ?")
-    .get(token);
-
-  if (!session) return null;
-
-  return rowToUser(
-    db.prepare("SELECT * FROM users WHERE user_id = ?").get(session.user_id)
-  );
+  const header = String(req.get("authorization") || "");
+  if (!/^Bearer [a-f0-9]{64}$/i.test(header)) return null;
+  const session = db.prepare("SELECT user_id FROM auth_sessions WHERE token_hash=? AND expires_at>?").get(deployment.sessionHash(header.slice(7)),Date.now());
+  return session ? rowToUser(db.prepare("SELECT * FROM users WHERE user_id=?").get(session.user_id)) : null;
 };
+const pairingEnabled = process.env.SPORTSYNC_DEVICE_PAIRING_ENABLED === "true" &&
+  process.env.SPORTSYNC_DEVICE_PAIRING_STORAGE_ACK === "true" && Boolean(process.env.SPORTSYNC_DB_PATH) && DB_PATH !== ":memory:";
+installDeviceRoutes(app, createDeviceRegistry(db), { enabled: pairingEnabled, getUser: getAuthUser });
 
 const requireAuthUser = (req, res) => {
   const user = getAuthUser(req);
@@ -1429,8 +1443,8 @@ app.post("/api/auth/signup", (req, res) => {
     return;
   }
 
-  if (password.length < 6) {
-    res.status(400).json({ error: "Password must be at least 6 characters." });
+  if (password.length < 12 || password.length > 256) {
+    res.status(400).json({ error: "New passwords must be 12 to 256 characters." });
     return;
   }
 
@@ -1492,6 +1506,12 @@ app.post("/api/auth/login", (req, res) => {
 
   const token = createSession(user.userId);
   res.json({ token, user: toUserDto(user) });
+});
+
+app.post("/api/auth/logout", (req,res) => {
+  const header=String(req.get("authorization") || "");
+  if (/^Bearer [a-f0-9]{64}$/i.test(header)) db.prepare("DELETE FROM auth_sessions WHERE token_hash=?").run(deployment.sessionHash(header.slice(7)));
+  res.status(204).end();
 });
 
 app.get("/api/auth/me", (req, res) => {
@@ -1794,6 +1814,6 @@ app.get("/", (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 
-server.listen(PORT, () => {
+server.listen(PORT, process.env.SPORTSYNC_ENVIRONMENT === "staging" ? process.env.SPORTSYNC_BIND_HOST : undefined, () => {
   console.log(`Server listening on port ${server.address().port}`);
 });

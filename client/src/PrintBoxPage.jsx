@@ -1,8 +1,7 @@
+import { authTokenKey, authUserKey } from "./auth-storage";
 import { useEffect, useMemo, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 
-const authTokenKey = "sportsAudioAuthToken";
-const authUserKey = "sportsAudioAuthUser";
 const printPayloadPrefix = "sportsAudioPrintBox:";
 
 const getApiUrl = () => {

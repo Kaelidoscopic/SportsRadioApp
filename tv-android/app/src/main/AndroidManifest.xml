@@ -10,7 +10,7 @@
     <uses-feature android:name="android.software.leanback" android:required="true" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
-    <application android:label="SportsRadio Capture" android:theme="@android:style/Theme.Material.NoActionBar"
+    <application android:label="@string/app_name" android:theme="@android:style/Theme.Material.NoActionBar"
         android:allowBackup="false" android:icon="@drawable/tv_banner" android:banner="@drawable/tv_banner"
         android:supportsRtl="true" android:usesCleartextTraffic="false" android:dataExtractionRules="@xml/no_backup">
         <activity android:name=".MainActivity" android:exported="true">
@@ -19,6 +19,7 @@
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name=".device.PairDeviceActivity" android:exported="false" />
         <service android:name=".CaptureService" android:exported="false"
             android:foregroundServiceType="mediaProjection|microphone" android:stopWithTask="true" />
     </application>

@@ -1,5 +1,7 @@
 # Android TV broadcaster
 
+**Phase 4 review build: 0.4.0 device identity/account pairing.** See [Phase 4 architecture and test instructions](../docs/device-pairing-phase-4.md). The 0.3.1 audio baseline is preserved; pairing remains disabled on an unconfigured backend. The user now additionally reports verified YouTube playback, locked-phone listening and three simultaneous listeners on the known-good baseline; older source-limit statements below record earlier test history, not new compatibility tests of 0.4.0.
+
 **Current implementation: version 0.3.1 known-good baseline (user-confirmed Hisense background TV-to-iPhone playback).** See [BACKGROUND_0_3_1.md](BACKGROUND_0_3_1.md) for the physical before/after investigation, APK and test procedure. The subsequent 0.3.0 report established room persistence but revealed background PCM silencing; its earlier acceptance is historical. See [SOURCE_DIAGNOSTICS.md](SOURCE_DIAGNOSTICS.md) for physical Test Player/iPhone and Back-navigation acceptance, background statistics and ADB comparison instructions. YouTube previously produced silence and remains unverified. Stage 2 / version 0.2.0 is the historical first playback baseline. See [STAGE_2.md](STAGE_2.md) for broadcasting, current installation commands, physical sender/receiver results, limitations and user-confirmed audible TV-to-iPhone acceptance. The application now uses Internet access for existing signaling and WebRTC. Capture remains playback-only.
 
 ## Archived Stage 1 notes (0.1.0)
@@ -177,3 +179,6 @@ First obtain physical positive/negative controls plus nonzero PCM from the desir
 No real-TV capture or phone streaming is claimed by this Stage 1 implementation.
 
 Current acceptance is limited to the documented Hisense/Test Player/iPhone configuration. YouTube (previously silent), Netflix, HDMI, other TV models and endurance testing remain unverified.
+# Hosted staging review
+
+See [SyncLink hosted staging preparation](../docs/hosted-staging-transition.md) for centralized public configuration, Android diagnostics, build commands and deployment gates. No hosted service has been provisioned. Local staging remains available separately.
